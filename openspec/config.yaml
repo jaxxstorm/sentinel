@@ -1,0 +1,195 @@
+schema: spec-driven
+
+context: |
+  Project: Sentinel
+  Goal: Build a daemon/tool that runs as a tsnet-embedded Tailscale node, continuously observes the tailnet netmap, diffs successive netmaps, and emits notifications on meaningful changes.
+
+  Scope approach:
+  - v0 focuses on peer presence changes (online/offline).
+  - Architecture must support expansion to "any netmap change" via a pluggable diff/rules engine.
+  - Expansion examples:
+    - routes / subnet routes advertised or approved changed
+    - exit node availability changes
+    - tags / identity attributes (as exposed via netmap)
+    - endpoints / DERP region / relay path changes (as exposed)
+    - key rotation/expiry indicators (as exposed)
+    - hostinfo/capabilities changes (as exposed)
+
+  Tech stack & conventions:
+  - Language: Go
+  - Tailscale embedding: tsnet (tailscale.com/tsnet)
+  - CLI: spf13/cobra
+  - Config: spf13/viper (supports YAML or JSON)
+  - Logging: uber-go/zap
+    - Default: human-readable pretty logs
+    - Optional: JSON logs for machine ingestion
+  - Output styling (human output): charmbracelet/lipgloss
+    - Not a TUI; no interactive UI; just pretty formatted output for CLI/status/log lines
+
+  Output and UX requirements:
+  - Default output is "pretty" and friendly for humans (lipgloss styling).
+  - Must support structured JSON logging output (zap JSON encoder) for production systems.
+  - Dry-run mode to print detected diffs without sending notifications.
+  - Rate limiting, batching, and suppression for noisy changes.
+
+rules:
+  naming:
+    - Use the project name "Sentinel" consistently in all artifacts.
+    - Use Tailscale-native language: tailnet, netmap, peer, node, routes.
+  style:
+    - Prefer short, concrete sentences.
+    - Use tables for config reference.
+    - Always include at least one YAML and one JSON config example.
+  engineering:
+    - Separate concerns: netmap observer, snapshot store, diff engine, rule/policy layer, notifier, sinks.
+    - Diff engine must emit typed events with stable schemas and versioning.
+    - Notifier interface must support idempotency keys to avoid duplicate alerts.
+    - Provide a testable abstraction over the netmap source (mockable).
+  reliability:
+    - Support debounce/hysteresis per change type.
+    - Support suppression windows and batching to reduce noise.
+    - Persist last-seen snapshot + last-sent idempotency state to survive restarts.
+  security:
+    - No secrets in examples; use placeholders like ${SLACK_WEBHOOK_URL}.
+    - Default logs must avoid leaking sensitive peer metadata; support redaction.
+  logging:
+    - Use zap for all logs.
+    - Provide log mode switch: pretty vs json.
+    - Pretty mode must be deterministic (no ANSI if NO_COLOR is set).
+  cli_config:
+    - Cobra is the source of CLI UX; Viper manages config + env overrides.
+    - Config supports YAML and JSON; env var overrides are supported with a clear prefix (e.g., SENTINEL_).
+
+artifacts:
+  readme:
+    type: markdown
+    description: |
+      Project README for Sentinel. Explain netmap diffing and notifications, with quickstarts.
+    sections:
+      - Overview
+      - Key Features (Diff-first, extensible change types)
+      - How it Works (Observe → Snapshot → Diff → Classify → Notify)
+      - Installation
+      - Configuration (YAML/JSON)
+      - CLI Usage
+      - Notification Sinks
+      - Output & Logging (pretty vs json, NO_COLOR)
+      - Security & Privacy
+      - Troubleshooting
+      - Roadmap (future change types)
+
+  architecture:
+    type: markdown
+    description: |
+      Architecture doc including extensible diff framework and change taxonomy.
+    include:
+      - Component diagram (Mermaid)
+      - Sequence diagram for "netmap updated → diff → events → notify"
+      - Change taxonomy and how to add a new change detector
+      - Failure modes and mitigations
+      - Noise management (debounce/suppression/batching)
+
+  event_schema:
+    type: markdown
+    description: |
+      Define canonical event types emitted by the diff engine and consumed by notifier/sinks.
+      Must be versioned and extensible.
+    must_include:
+      - Base fields: event_id, event_type, severity, timestamp, subject_id, subject_type, before_hash, after_hash
+      - Change-specific payloads for v0 presence changes
+      - Guidance for adding new change types (routes, endpoints, tags, etc.)
+
+  diff_engine_spec:
+    type: markdown
+    description: |
+      Diff engine design. Describe snapshot normalization, hashing, and typed detector plugins.
+    requirements:
+      - Define snapshot normalization rules to reduce spurious diffs
+      - Provide detector interface and ordering
+      - Provide examples: PresenceDetector (v0), RoutesDetector (future)
+
+  config_spec:
+    type: markdown
+    description: |
+      Configuration reference for YAML/JSON plus CLI flag mapping and env overrides.
+    must_include:
+      - netmap polling interval
+      - change detectors enabled/disabled
+      - debounce/suppression per detector
+      - notification sinks and routing rules
+      - rate limiting & batching settings
+      - state store configuration
+      - output mode (pretty/json), NO_COLOR behavior, log level
+
+  example_config_yaml:
+    type: yaml
+    description: |
+      Example sentinel.yml with safe defaults and placeholder secrets.
+
+  example_config_json:
+    type: json
+    description: |
+      Example sentinel.json with the same content as YAML example.
+
+  cli_spec:
+    type: markdown
+    description: |
+      CLI commands, flags, and examples using Cobra conventions.
+    commands:
+      - sentinel run
+      - sentinel status
+      - sentinel diff
+      - sentinel dump-netmap
+      - sentinel test-notify
+      - sentinel validate-config
+    requirements:
+      - Every command supports --config
+      - Global flags: --log-format=pretty|json, --log-level, --no-color
+      - run supports --dry-run and --once
+
+  output_style_guide:
+    type: markdown
+    description: |
+      Lipgloss styling guidelines for human output. No TUI; just formatted text.
+    must_include:
+      - Color and emphasis rules
+      - NO_COLOR handling
+      - Examples of diff output formatting
+
+  task_plan:
+    type: markdown
+    description: |
+      Milestone-based implementation plan with acceptance criteria.
+    constraints:
+      - Tasks should be small (<= 2 hours each) where possible
+
+  metrics_spec:
+    type: markdown
+    description: |
+      Prometheus metrics and structured log fields for observability.
+    must_include:
+      - netmap_polls_total
+      - netmap_poll_duration_seconds
+      - diffs_detected_total{type="..."}
+      - events_emitted_total{type="..."}
+      - notifications_sent_total{sink="..."}
+      - notifications_suppressed_total{reason="debounce|rate_limit|batch"}
+      - state_store_errors_total
+
+  threat_model:
+    type: markdown
+    description: |
+      Threat model and privacy review for netmap-derived data.
+    must_include:
+      - Data inventory
+      - Redaction rules
+      - Principle of least privilege
+      - Secure defaults and configuration pitfalls
+
+acceptance_criteria:
+  - Observes netmap snapshots and detects changes via diffs.
+  - v0 emits events for peer online/offline transitions.
+  - Diff/event system is extensible to additional netmap change types (e.g., routes changed) without redesign.
+  - Sends notifications via at least one sink with dry-run support.
+  - Default output is pretty, styled with lipgloss; optional JSON logs via zap.
+  - CLI/config implemented with cobra/viper; supports YAML and JSON config formats and env overrides.
