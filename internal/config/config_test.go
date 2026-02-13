@@ -220,3 +220,129 @@ func TestValidateRejectsUnsupportedSinkType(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestLoadSupportsStructuredEnvOnlyConfig(t *testing.T) {
+	t.Setenv(envVarDetectors, `{"presence":{"enabled":true},"runtime":{"enabled":false}}`)
+	t.Setenv(envVarDetectorOrder, `["presence","runtime"]`)
+	t.Setenv(envVarNotifierSinks, `[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"https://discord.com/api/webhooks/a/b"}]`)
+	t.Setenv(envVarNotifierRoutes, `[{"event_types":["*"],"severities":[],"sinks":["stdout-debug","discord-primary"]}]`)
+	t.Setenv(envVarStatePath, filepath.Join(t.TempDir(), "state.json"))
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := len(cfg.Detectors); got != 2 {
+		t.Fatalf("expected 2 detectors from structured env, got %d", got)
+	}
+	if cfg.Detectors["runtime"].Enabled {
+		t.Fatal("expected runtime detector to be disabled from structured env")
+	}
+	if len(cfg.DetectorOrder) != 2 || cfg.DetectorOrder[0] != "presence" || cfg.DetectorOrder[1] != "runtime" {
+		t.Fatalf("unexpected detector order: %v", cfg.DetectorOrder)
+	}
+	if len(cfg.Notifier.Sinks) != 2 {
+		t.Fatalf("expected 2 sinks from structured env, got %d", len(cfg.Notifier.Sinks))
+	}
+	if cfg.Notifier.Sinks[1].Type != "discord" {
+		t.Fatalf("expected second sink to be discord, got %q", cfg.Notifier.Sinks[1].Type)
+	}
+	if len(cfg.Notifier.Routes) != 1 || len(cfg.Notifier.Routes[0].EventTypes) != 1 || cfg.Notifier.Routes[0].EventTypes[0] != "*" {
+		t.Fatalf("unexpected notifier routes: %+v", cfg.Notifier.Routes)
+	}
+}
+
+func TestLoadStructuredEnvOverridesTakePrecedence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"poll_interval: 30s\n" +
+		"state:\n" +
+		"  path: " + filepath.ToSlash(filepath.Join(dir, "state.json")) + "\n" +
+		"notifier:\n" +
+		"  sinks:\n" +
+		"    - name: webhook-primary\n" +
+		"      type: webhook\n" +
+		"      url: https://example.invalid/original\n" +
+		"  routes:\n" +
+		"    - event_types: [\"peer.online\"]\n" +
+		"      sinks: [\"webhook-primary\"]\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SENTINEL_POLL_INTERVAL", "5s")
+	t.Setenv(envVarNotifierSinks, `[{"name":"stdout-debug","type":"stdout"}]`)
+	t.Setenv(envVarNotifierRoutes, `[{"event_types":["*"],"sinks":["stdout-debug"]}]`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PollInterval != 5*time.Second {
+		t.Fatalf("expected scalar env override for poll interval, got %s", cfg.PollInterval)
+	}
+	if len(cfg.Notifier.Sinks) != 1 || cfg.Notifier.Sinks[0].Name != "stdout-debug" {
+		t.Fatalf("expected structured env sinks to override file sinks, got %+v", cfg.Notifier.Sinks)
+	}
+	if len(cfg.Notifier.Routes) != 1 || cfg.Notifier.Routes[0].EventTypes[0] != "*" {
+		t.Fatalf("expected structured env routes to override file routes, got %+v", cfg.Notifier.Routes)
+	}
+}
+
+func TestLoadFailsOnMalformedStructuredEnvValue(t *testing.T) {
+	t.Setenv(envVarNotifierSinks, "{bad")
+	_, err := Load("")
+	if err == nil {
+		t.Fatal("expected parse error for malformed structured env value")
+	}
+	if !strings.Contains(err.Error(), envVarNotifierSinks) {
+		t.Fatalf("expected error to include env key, got %v", err)
+	}
+}
+
+func TestLoadFailsOnEmptyStructuredEnvValue(t *testing.T) {
+	t.Setenv(envVarNotifierRoutes, "   ")
+	_, err := Load("")
+	if err == nil {
+		t.Fatal("expected parse error for empty structured env value")
+	}
+	if !strings.Contains(err.Error(), envVarNotifierRoutes) {
+		t.Fatalf("expected error to include env key, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("expected error to mention empty value, got %v", err)
+	}
+}
+
+func TestLoadFileConfigRemainsUnchangedWithoutStructuredEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"state:\n" +
+		"  path: " + filepath.ToSlash(filepath.Join(dir, "state.json")) + "\n" +
+		"notifier:\n" +
+		"  sinks:\n" +
+		"    - name: webhook-primary\n" +
+		"      type: webhook\n" +
+		"      url: https://example.invalid/file\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, sink := range cfg.Notifier.Sinks {
+		if sink.Name == "webhook-primary" && sink.URL == "https://example.invalid/file" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected file-based sink to remain present, got %+v", cfg.Notifier.Sinks)
+	}
+}

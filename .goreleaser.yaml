@@ -1,0 +1,45 @@
+version: 2
+
+project_name: sentinel
+
+builds:
+  - id: sentinel
+    main: ./cmd/sentinel
+    binary: sentinel
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/jaxxstorm/sentinel/internal/constants.TagName={{ .Tag }}
+        -X github.com/jaxxstorm/sentinel/internal/constants.BuildTimestamp={{ .Date }}
+        -X github.com/jaxxstorm/sentinel/internal/constants.CommitHash={{ .FullCommit }}
+
+archives:
+  - id: sentinel
+    builds:
+      - sentinel
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  name_template: "{{ .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

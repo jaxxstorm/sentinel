@@ -125,3 +125,24 @@ func TestBuildRuntimeDeliversEventToDiscordSink(t *testing.T) {
 		t.Fatalf("expected 1 discord request, got %d", requests)
 	}
 }
+
+func TestBuildRuntimeSupportsEnvOnlyConfig(t *testing.T) {
+	t.Setenv("SENTINEL_STATE_PATH", filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")))
+	t.Setenv("SENTINEL_NOTIFIER_SINKS", `[{"name":"stdout-debug","type":"stdout"}]`)
+	t.Setenv("SENTINEL_NOTIFIER_ROUTES", `[{"event_types":["peer.online"],"sinks":["stdout-debug"]}]`)
+
+	deps, err := buildRuntime(&GlobalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.runner.Source = source.NewStaticSource(source.Netmap{Peers: []source.Peer{{ID: "peer-env", Name: "peer-env", Online: true}}})
+	deps.runner.Enrollment = nil
+
+	res, err := deps.runner.RunOnce(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.DryRunCount == 0 {
+		t.Fatal("expected dry-run notification count > 0 for env-only config")
+	}
+}

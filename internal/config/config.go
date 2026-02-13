@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,73 +13,82 @@ import (
 )
 
 type Config struct {
-	PollInterval   time.Duration       `mapstructure:"poll_interval"`
-	PollJitter     time.Duration       `mapstructure:"poll_jitter"`
-	PollBackoffMin time.Duration       `mapstructure:"poll_backoff_min"`
-	PollBackoffMax time.Duration       `mapstructure:"poll_backoff_max"`
-	Source         SourceConfig        `mapstructure:"source"`
-	Detectors      map[string]Detector `mapstructure:"detectors"`
-	DetectorOrder  []string            `mapstructure:"detector_order"`
-	Policy         PolicyConfig        `mapstructure:"policy"`
-	Notifier       NotifierConfig      `mapstructure:"notifier"`
-	State          StateConfig         `mapstructure:"state"`
-	Output         OutputConfig        `mapstructure:"output"`
-	TSNet          TSNetConfig         `mapstructure:"tsnet"`
+	PollInterval   time.Duration       `mapstructure:"poll_interval" json:"poll_interval"`
+	PollJitter     time.Duration       `mapstructure:"poll_jitter" json:"poll_jitter"`
+	PollBackoffMin time.Duration       `mapstructure:"poll_backoff_min" json:"poll_backoff_min"`
+	PollBackoffMax time.Duration       `mapstructure:"poll_backoff_max" json:"poll_backoff_max"`
+	Source         SourceConfig        `mapstructure:"source" json:"source"`
+	Detectors      map[string]Detector `mapstructure:"detectors" json:"detectors"`
+	DetectorOrder  []string            `mapstructure:"detector_order" json:"detector_order"`
+	Policy         PolicyConfig        `mapstructure:"policy" json:"policy"`
+	Notifier       NotifierConfig      `mapstructure:"notifier" json:"notifier"`
+	State          StateConfig         `mapstructure:"state" json:"state"`
+	Output         OutputConfig        `mapstructure:"output" json:"output"`
+	TSNet          TSNetConfig         `mapstructure:"tsnet" json:"tsnet"`
 }
 
 type Detector struct {
-	Enabled bool `mapstructure:"enabled"`
+	Enabled bool `mapstructure:"enabled" json:"enabled"`
 }
 
 type SourceConfig struct {
-	Mode string `mapstructure:"mode"`
+	Mode string `mapstructure:"mode" json:"mode"`
 }
 
 type PolicyConfig struct {
-	DebounceWindow    time.Duration `mapstructure:"debounce_window"`
-	SuppressionWindow time.Duration `mapstructure:"suppression_window"`
-	RateLimitPerMin   int           `mapstructure:"rate_limit_per_min"`
-	BatchSize         int           `mapstructure:"batch_size"`
+	DebounceWindow    time.Duration `mapstructure:"debounce_window" json:"debounce_window"`
+	SuppressionWindow time.Duration `mapstructure:"suppression_window" json:"suppression_window"`
+	RateLimitPerMin   int           `mapstructure:"rate_limit_per_min" json:"rate_limit_per_min"`
+	BatchSize         int           `mapstructure:"batch_size" json:"batch_size"`
 }
 
 type NotifierConfig struct {
-	IdempotencyKeyTTL time.Duration `mapstructure:"idempotency_key_ttl"`
-	Routes            []RouteConfig `mapstructure:"routes"`
-	Sinks             []SinkConfig  `mapstructure:"sinks"`
+	IdempotencyKeyTTL time.Duration `mapstructure:"idempotency_key_ttl" json:"idempotency_key_ttl"`
+	Routes            []RouteConfig `mapstructure:"routes" json:"routes"`
+	Sinks             []SinkConfig  `mapstructure:"sinks" json:"sinks"`
 }
 
 type RouteConfig struct {
-	EventTypes []string `mapstructure:"event_types"`
-	Severities []string `mapstructure:"severities"`
-	Sinks      []string `mapstructure:"sinks"`
+	EventTypes []string `mapstructure:"event_types" json:"event_types"`
+	Severities []string `mapstructure:"severities" json:"severities"`
+	Sinks      []string `mapstructure:"sinks" json:"sinks"`
 }
 
 type SinkConfig struct {
-	Name string `mapstructure:"name"`
-	Type string `mapstructure:"type"`
-	URL  string `mapstructure:"url"`
+	Name string `mapstructure:"name" json:"name"`
+	Type string `mapstructure:"type" json:"type"`
+	URL  string `mapstructure:"url" json:"url"`
 }
 
 type StateConfig struct {
-	Path              string        `mapstructure:"path"`
-	IdempotencyKeyTTL time.Duration `mapstructure:"idempotency_key_ttl"`
+	Path              string        `mapstructure:"path" json:"path"`
+	IdempotencyKeyTTL time.Duration `mapstructure:"idempotency_key_ttl" json:"idempotency_key_ttl"`
 }
 
 type OutputConfig struct {
-	LogFormat string `mapstructure:"log_format"`
-	LogLevel  string `mapstructure:"log_level"`
-	NoColor   bool   `mapstructure:"no_color"`
+	LogFormat string `mapstructure:"log_format" json:"log_format"`
+	LogLevel  string `mapstructure:"log_level" json:"log_level"`
+	NoColor   bool   `mapstructure:"no_color" json:"no_color"`
 }
 
 type TSNetConfig struct {
-	Hostname                 string        `mapstructure:"hostname"`
-	StateDir                 string        `mapstructure:"state_dir"`
-	AuthKey                  string        `mapstructure:"auth_key"`
-	LoginMode                string        `mapstructure:"login_mode"`
-	AllowInteractiveFallback bool          `mapstructure:"allow_interactive_fallback"`
-	LoginTimeout             time.Duration `mapstructure:"login_timeout"`
+	Hostname                 string        `mapstructure:"hostname" json:"hostname"`
+	StateDir                 string        `mapstructure:"state_dir" json:"state_dir"`
+	AuthKey                  string        `mapstructure:"auth_key" json:"auth_key"`
+	LoginMode                string        `mapstructure:"login_mode" json:"login_mode"`
+	AllowInteractiveFallback bool          `mapstructure:"allow_interactive_fallback" json:"allow_interactive_fallback"`
+	LoginTimeout             time.Duration `mapstructure:"login_timeout" json:"login_timeout"`
 	AuthKeySource            string        `mapstructure:"-"`
 }
+
+const (
+	envVarConfigPath     = "SENTINEL_CONFIG_PATH"
+	envVarStatePath      = "SENTINEL_STATE_PATH"
+	envVarDetectors      = "SENTINEL_DETECTORS"
+	envVarDetectorOrder  = "SENTINEL_DETECTOR_ORDER"
+	envVarNotifierSinks  = "SENTINEL_NOTIFIER_SINKS"
+	envVarNotifierRoutes = "SENTINEL_NOTIFIER_ROUTES"
+)
 
 func Default() Config {
 	return Config{
@@ -135,7 +145,7 @@ func Load(path string) (Config, error) {
 	v.AutomaticEnv()
 
 	// Check env config too before checking file path
-	envConfigPath := v.GetString("SENTINEL_CONFIG_PATH")
+	envConfigPath := strings.TrimSpace(os.Getenv(envVarConfigPath))
 
 	if path == "" && envConfigPath != "" {
 		path = envConfigPath
@@ -170,15 +180,80 @@ func Load(path string) (Config, error) {
 	v.SetDefault("tsnet.login_mode", cfg.TSNet.LoginMode)
 	v.SetDefault("tsnet.allow_interactive_fallback", cfg.TSNet.AllowInteractiveFallback)
 	v.SetDefault("tsnet.login_timeout", cfg.TSNet.LoginTimeout)
+	suppressStructuredEnvForViper(v)
 
 	if err := v.Unmarshal(&cfg); err != nil {
 		return cfg, fmt.Errorf("unmarshal config: %w", err)
 	}
+	if err := applyStructuredEnvOverrides(&cfg); err != nil {
+		return cfg, err
+	}
 	expandEnvPlaceholders(&cfg)
-	if envPath := os.Getenv("SENTINEL_STATE_PATH"); envPath != "" {
+	if envPath := strings.TrimSpace(os.Getenv(envVarStatePath)); envPath != "" {
 		cfg.State.Path = envPath
 	}
 	return cfg, Validate(cfg)
+}
+
+func applyStructuredEnvOverrides(cfg *Config) error {
+	var detectors map[string]Detector
+	if present, err := decodeEnvJSON(envVarDetectors, &detectors); err != nil {
+		return err
+	} else if present {
+		cfg.Detectors = detectors
+		if cfg.Detectors == nil {
+			cfg.Detectors = map[string]Detector{}
+		}
+	}
+	var detectorOrder []string
+	if present, err := decodeEnvJSON(envVarDetectorOrder, &detectorOrder); err != nil {
+		return err
+	} else if present {
+		cfg.DetectorOrder = detectorOrder
+	}
+	var sinks []SinkConfig
+	if present, err := decodeEnvJSON(envVarNotifierSinks, &sinks); err != nil {
+		return err
+	} else if present {
+		cfg.Notifier.Sinks = sinks
+	}
+	var routes []RouteConfig
+	if present, err := decodeEnvJSON(envVarNotifierRoutes, &routes); err != nil {
+		return err
+	} else if present {
+		cfg.Notifier.Routes = routes
+	}
+	return nil
+}
+
+func suppressStructuredEnvForViper(v *viper.Viper) {
+	if _, ok := os.LookupEnv(envVarDetectors); ok {
+		v.Set("detectors", map[string]Detector{})
+	}
+	if _, ok := os.LookupEnv(envVarDetectorOrder); ok {
+		v.Set("detector_order", []string{})
+	}
+	if _, ok := os.LookupEnv(envVarNotifierSinks); ok {
+		v.Set("notifier.sinks", []SinkConfig{})
+	}
+	if _, ok := os.LookupEnv(envVarNotifierRoutes); ok {
+		v.Set("notifier.routes", []RouteConfig{})
+	}
+}
+
+func decodeEnvJSON(key string, target any) (bool, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return false, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return true, fmt.Errorf("parse %s: value is empty; expected JSON", key)
+	}
+	if err := json.Unmarshal([]byte(raw), target); err != nil {
+		return true, fmt.Errorf("parse %s: %w", key, err)
+	}
+	return true, nil
 }
 
 func expandEnvPlaceholders(cfg *Config) {
