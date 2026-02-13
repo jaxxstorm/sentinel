@@ -40,5 +40,6 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newDumpNetmapCmd(opts))
 	cmd.AddCommand(newTestNotifyCmd(opts))
 	cmd.AddCommand(newValidateConfigCmd(opts))
+	cmd.AddCommand(newVersionCmd(opts))
 	return cmd
 }

@@ -134,6 +134,13 @@ func Load(path string) (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	v.AutomaticEnv()
 
+	// Check env config too before checking file path
+	envConfigPath := v.GetString("SENTINEL_CONFIG_PATH")
+
+	if path == "" && envConfigPath != "" {
+		path = envConfigPath
+	}
+
 	if path != "" {
 		v.SetConfigFile(path)
 		if err := v.ReadInConfig(); err != nil {
