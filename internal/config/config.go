@@ -239,5 +239,16 @@ func Validate(cfg Config) error {
 			}
 		}
 	}
+	for i, sink := range cfg.Notifier.Sinks {
+		sinkType := strings.ToLower(strings.TrimSpace(sink.Type))
+		switch sinkType {
+		case "", "webhook", "stdout", "debug", "discord":
+		default:
+			return fmt.Errorf("notifier.sinks[%d].type has unsupported value %q", i, sink.Type)
+		}
+		if sinkType == "discord" && strings.TrimSpace(sink.URL) == "" {
+			return fmt.Errorf("notifier.sinks[%d].url is required for discord sink", i)
+		}
+	}
 	return nil
 }

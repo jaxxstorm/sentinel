@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jaxxstorm/sentinel/internal/event"
 	"github.com/jaxxstorm/sentinel/internal/state"
+	"go.uber.org/zap"
 )
 
 type fakeSink struct {
@@ -151,5 +154,48 @@ func TestNotifierMixedWildcardAndLiteralStillMatchesAll(t *testing.T) {
 	}
 	if sink.sends != 1 {
 		t.Fatalf("expected mixed wildcard route send count 1, got %d", sink.sends)
+	}
+}
+
+func TestNotifierRoutesEventToDiscordSink(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := NewDiscordSink("discord-primary", srv.URL, zap.NewNop())
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{event.TypePeerOnline},
+			Sinks:      []string{"discord-primary"},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPresenceEvent(event.TypePeerOnline, "peer1", "before", "after", nil, time.Now())
+
+	res, err := n.Notify(context.Background(), []event.Event{evt}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 1 {
+		t.Fatalf("expected sent=1, got %d", res.Sent)
+	}
+	if requests != 1 {
+		t.Fatalf("expected 1 discord request, got %d", requests)
+	}
+
+	res, err = n.Notify(context.Background(), []event.Event{evt}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Suppressed != 1 {
+		t.Fatalf("expected duplicate suppression for discord route, got %d", res.Suppressed)
+	}
+	if requests != 1 {
+		t.Fatalf("expected no extra request after suppression, got %d", requests)
 	}
 }

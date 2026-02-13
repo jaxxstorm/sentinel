@@ -176,3 +176,47 @@ func TestValidateRejectsEmptyNotifierEventTypes(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestValidateAcceptsDiscordSink(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Sinks = append(cfg.Notifier.Sinks, SinkConfig{
+		Name: "discord-primary",
+		Type: "discord",
+		URL:  "https://discord.com/api/webhooks/a/b",
+	})
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected discord sink to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsDiscordSinkWithoutURL(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Sinks = []SinkConfig{{
+		Name: "discord-primary",
+		Type: "discord",
+		URL:  "",
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for discord sink without url")
+	}
+	if !strings.Contains(err.Error(), "url is required for discord sink") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsUnsupportedSinkType(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Sinks = []SinkConfig{{
+		Name: "unknown",
+		Type: "pagerduty",
+		URL:  "https://example.com",
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for unsupported sink type")
+	}
+	if !strings.Contains(err.Error(), "unsupported value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

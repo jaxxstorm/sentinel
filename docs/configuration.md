@@ -41,6 +41,8 @@ Ordered list of enabled detector names.
 ### `notifier`
 - `idempotency_key_ttl`
 - `sinks`: sink definitions
+  - supported sink `type` values: `stdout`, `debug`, `webhook`, `discord`
+  - `discord` sinks require a non-empty webhook URL
 - `routes`: routing rules by event type and severity
   - `event_types` supports explicit values (for example `peer.online`) and wildcard `*` (match all event types)
 
@@ -71,6 +73,9 @@ notifier:
     - name: webhook-primary
       type: webhook
       url: ${REQUESTBIN_WEBHOOK_URL}
+    - name: discord-primary
+      type: discord
+      url: ${SENTINEL_DISCORD_WEBHOOK_URL}
 ```
 
 Set the variable before running Sentinel:

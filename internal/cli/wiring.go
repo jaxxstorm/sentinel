@@ -98,7 +98,8 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	availableSinks := map[string]struct{}{}
 	defaultSinkPresent := false
 	for _, sinkCfg := range cfg.Notifier.Sinks {
-		switch sinkCfg.Type {
+		sinkType := strings.ToLower(strings.TrimSpace(sinkCfg.Type))
+		switch sinkType {
 		case "", "webhook":
 			url := strings.TrimSpace(sinkCfg.URL)
 			if url == "" || strings.Contains(url, "${") {
@@ -119,6 +120,14 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 			if sink.Name() == defaultSinkName {
 				defaultSinkPresent = true
 			}
+		case "discord":
+			url := strings.TrimSpace(sinkCfg.URL)
+			if url == "" || strings.Contains(url, "${") {
+				return nil, fmt.Errorf("discord sink %q requires a non-empty webhook url", sinkCfg.Name)
+			}
+			sink := notify.NewDiscordSink(sinkCfg.Name, url, logging.WithSource(logger, logging.LogSourceSink))
+			sinks = append(sinks, sink)
+			availableSinks[sink.Name()] = struct{}{}
 		default:
 			return nil, fmt.Errorf("unsupported sink type %q", sinkCfg.Type)
 		}

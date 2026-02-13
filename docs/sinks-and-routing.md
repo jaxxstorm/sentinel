@@ -36,6 +36,26 @@ Failure log example:
 WARN webhook send failed {"log_source":"sink","sink":"webhook-primary","status_code":502,"attempt":2,"max_attempts":4}
 ```
 
+### `discord`
+Sends HTTP POST requests to a Discord webhook endpoint.
+
+- Uses a Discord-friendly `content` payload with event summary fields.
+- Includes `Idempotency-Key` header.
+- Retries on failure (bounded attempts with backoff).
+- Logs success/failure with sink name and status code.
+
+Success log example:
+
+```text
+INFO discord send succeeded {"log_source":"sink","sink":"discord-primary","status_code":204}
+```
+
+Failure log example:
+
+```text
+WARN discord send failed {"log_source":"sink","sink":"discord-primary","status_code":502,"attempt":1,"max_attempts":4}
+```
+
 ## Route Matching
 
 Routes match by:
@@ -50,7 +70,7 @@ Example:
 routes:
   - event_types: ["*"]
     severities: []
-    sinks: ["stdout-debug", "webhook-primary"]
+    sinks: ["stdout-debug", "webhook-primary", "discord-primary"]
 ```
 
 Explicit matching is still supported:
@@ -89,4 +109,11 @@ Use normal `test-notify` to validate actual webhook delivery:
 ```bash
 REQUESTBIN_WEBHOOK_URL="https://your-endpoint" \
 go run ./cmd/sentinel test-notify --config ./config.example.yaml
+```
+
+To validate Discord delivery, point a Discord sink URL at your webhook:
+
+```bash
+SENTINEL_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..." \
+go run ./cmd/sentinel run --config ./config.example.yaml --log-level debug
 ```

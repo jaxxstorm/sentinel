@@ -9,6 +9,17 @@
 3. Verify endpoint availability independently with `curl`.
 4. Keep process running long enough to observe retry completion.
 
+## Event appears in stdout sink but not Discord
+
+1. Confirm the Discord sink has `type: discord` and a non-empty webhook URL.
+2. Run config validation and check for sink errors:
+   - `go run ./cmd/sentinel validate-config --config ./config.example.yaml`
+3. Look for sink logs:
+   - `discord send succeeded`
+   - `discord send failed`
+4. Confirm the webhook is a Discord webhook URL and not revoked.
+5. Keep process running long enough to observe retry completion.
+
 ## Repeated transitions and idempotency
 
 Sentinel stores idempotency keys in the state file.
@@ -37,6 +48,8 @@ Common issues:
 - missing `state.path` or `tsnet.state_dir`
 - unsupported `source.mode` or `tsnet.login_mode`
 - unknown `notifier.routes[].event_types` values (use a documented event type or `*`)
+- unsupported `notifier.sinks[].type` values
+- `discord` sink configured without a webhook URL
 
 ## Wildcard routing checks
 

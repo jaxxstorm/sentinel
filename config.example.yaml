@@ -4,6 +4,7 @@
 #
 # Optional env vars:
 #   export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+#   export SENTINEL_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 #   export SENTINEL_TAILSCALE_AUTH_KEY="tskey-..."
 
 poll_interval: 10s
@@ -48,16 +49,22 @@ notifier:
     - name: stdout-debug
       type: stdout
 
-    # Optional webhook sink. If URL is empty or placeholder, it is skipped.
-    - name: webhook-primary
-      type: webhook
-      url: ${SENTINEL_WEBHOOK_URL}
+    # # Optional webhook sink. If URL is empty or placeholder, it is skipped.
+    # - name: webhook-primary
+    #   type: webhook
+    #   url: ${SENTINEL_WEBHOOK_URL}
+
+    # Optional Discord sink. Requires a valid webhook URL.
+    - name: discord-primary
+      type: discord
+      url: ${SENTINEL_DISCORD_WEBHOOK_URL}
 
   routes:
     # Use "*" to match all emitted event types.
     - event_types: ["*"]
       severities: []
-      sinks: ["stdout-debug", "webhook-primary"]
+      sinks: ["stdout-debug", "discord-primary"]
+      # sinks: ["stdout-debug", "webhook-primary", "discord-primary"]
 
     # Example explicit route:
     # - event_types: ["peer.online", "peer.offline", "peer.routes.changed", "daemon.state.changed"]
