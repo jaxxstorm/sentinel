@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"go.uber.org/zap"
@@ -34,6 +35,8 @@ type TSNetRealtimeSource struct {
 	server  *tsnet.Server
 	cfg     RealtimeConfig
 	watcher IPNBusWatcher
+	cache   Netmap
+	ready   bool
 }
 
 func NewTSNetRealtimeSource(server *tsnet.Server, cfg RealtimeConfig) *TSNetRealtimeSource {
@@ -101,8 +104,40 @@ func (s *TSNetRealtimeSource) Poll(ctx context.Context) (Netmap, error) {
 		if note.ErrMessage != nil {
 			s.cfg.Logger.Warn("ipnbus event contains error message", zap.String("error_message", *note.ErrMessage))
 		}
+		updated := false
+		if note.State != nil {
+			s.cache.DaemonState = note.State.String()
+			updated = true
+		}
+		if note.Prefs != nil && note.Prefs.Valid() {
+			routes := make([]string, 0, note.Prefs.AdvertiseRoutes().Len())
+			for i := 0; i < note.Prefs.AdvertiseRoutes().Len(); i++ {
+				routes = append(routes, note.Prefs.AdvertiseRoutes().At(i).String())
+			}
+			sort.Strings(routes)
+			exitNodeID := ""
+			if !note.Prefs.ExitNodeID().IsZero() {
+				exitNodeID = string(note.Prefs.ExitNodeID())
+			}
+			s.cache.Prefs = Prefs{
+				AdvertiseRoutes: routes,
+				ExitNodeID:      exitNodeID,
+				RunSSH:          note.Prefs.RunSSH(),
+				ShieldsUp:       note.Prefs.ShieldsUp(),
+			}
+			updated = true
+		}
+		if note.ErrMessage != nil {
+			s.cache.ErrorMessage = *note.ErrMessage
+			updated = true
+		}
 		if note.NetMap == nil {
-			continue
+			if !updated || !s.ready {
+				continue
+			}
+			out := cloneNetmap(s.cache)
+			out.PolledAt = time.Now().UTC()
+			return out, nil
 		}
 
 		netmapData, err := json.Marshal(note.NetMap)
@@ -110,14 +145,27 @@ func (s *TSNetRealtimeSource) Poll(ctx context.Context) (Netmap, error) {
 			s.cfg.Logger.Warn("failed to marshal ipnbus netmap payload", zap.Error(err))
 			continue
 		}
-		peers, err := decodePeersFromNetMapJSON(netmapData)
+		decoded, err := decodeNetMapJSON(netmapData)
 		if err != nil {
 			s.cfg.Logger.Warn("failed to decode ipnbus netmap payload", zap.Error(err))
 			continue
 		}
+		if note.NetMap != nil {
+			decoded.Tailnet.Domain = firstNonEmpty(decoded.Tailnet.Domain, note.NetMap.Domain)
+			decoded.Tailnet.TKAEnabled = note.NetMap.TKAEnabled
+		}
+		s.cache.Peers = decoded.Peers
+		s.cache.Tailnet = decoded.Tailnet
+		s.ready = true
+		updated = true
 
-		s.cfg.Logger.Info("ipnbus netmap update received", zap.Int("peer_count", len(peers)))
-		return Netmap{PolledAt: time.Now().UTC(), Peers: peers}, nil
+		if !updated {
+			continue
+		}
+		out := cloneNetmap(s.cache)
+		out.PolledAt = time.Now().UTC()
+		s.cfg.Logger.Info("ipnbus netmap update received", zap.Int("peer_count", len(out.Peers)))
+		return out, nil
 	}
 }
 
@@ -172,4 +220,30 @@ func minBackoff(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func cloneNetmap(nm Netmap) Netmap {
+	out := nm
+	out.Peers = make([]Peer, len(nm.Peers))
+	for i, p := range nm.Peers {
+		clone := p
+		if len(p.Tags) > 0 {
+			clone.Tags = append([]string(nil), p.Tags...)
+		}
+		if len(p.Routes) > 0 {
+			clone.Routes = append([]string(nil), p.Routes...)
+		}
+		if len(p.Metadata) > 0 {
+			meta := make(map[string]string, len(p.Metadata))
+			for k, v := range p.Metadata {
+				meta[k] = v
+			}
+			clone.Metadata = meta
+		}
+		out.Peers[i] = clone
+	}
+	if len(nm.Prefs.AdvertiseRoutes) > 0 {
+		out.Prefs.AdvertiseRoutes = append([]string(nil), nm.Prefs.AdvertiseRoutes...)
+	}
+	return out
 }

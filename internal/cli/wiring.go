@@ -10,7 +10,6 @@ import (
 	"github.com/jaxxstorm/sentinel/internal/app"
 	"github.com/jaxxstorm/sentinel/internal/config"
 	"github.com/jaxxstorm/sentinel/internal/diff"
-	"github.com/jaxxstorm/sentinel/internal/event"
 	"github.com/jaxxstorm/sentinel/internal/logging"
 	"github.com/jaxxstorm/sentinel/internal/metrics"
 	"github.com/jaxxstorm/sentinel/internal/notify"
@@ -81,7 +80,11 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	}
 	sentinelLogger := logging.WithSource(logger, logging.LogSourceSentinel)
 	st := state.NewFileStore(cfg.State.Path)
-	detectors := []diff.Detector{diff.NewPresenceDetector()}
+	detectors := []diff.Detector{
+		diff.NewPresenceDetector(),
+		diff.NewPeerChangeDetector(),
+		diff.NewRuntimeDetector(),
+	}
 	engine := diff.NewEngine(detectors)
 	policyEngine := policy.NewEngine(policy.Config{
 		DebounceWindow:    cfg.Policy.DebounceWindow,
@@ -144,7 +147,7 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	if len(routes) == 0 {
 		sentinelLogger.Info("adding default notifier route to stdout-debug")
 		routes = append(routes, notify.Route{
-			EventTypes: []string{event.TypePeerOnline, event.TypePeerOffline},
+			EventTypes: []string{"*"},
 			Sinks:      []string{defaultSinkName},
 		})
 	}

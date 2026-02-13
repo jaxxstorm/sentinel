@@ -93,3 +93,63 @@ func TestNotifierPersistsIdempotencyAcrossInstances(t *testing.T) {
 		t.Fatalf("expected duplicate suppression across restart, got %d sends", sink.sends)
 	}
 }
+
+func TestNotifierWildcardRouteMatchesExpandedEvents(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-all"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-all"},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerRoutesChanged, "peer1", "before", "after", nil, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected wildcard route send count 1, got %d", sink.sends)
+	}
+}
+
+func TestNotifierExplicitRouteDoesNotMatchDifferentType(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-explicit"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{event.TypePeerOnline},
+			Sinks:      []string{"sink-explicit"},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerRoutesChanged, "peer1", "before", "after", nil, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 0 {
+		t.Fatalf("expected explicit route to skip unmatched event, got %d sends", sink.sends)
+	}
+}
+
+func TestNotifierMixedWildcardAndLiteralStillMatchesAll(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-mixed"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{event.TypePeerOnline, "*"},
+			Sinks:      []string{"sink-mixed"},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPrefsEvent(event.TypePrefsRunSSHChanged, "local", "before", "after", nil, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected mixed wildcard route send count 1, got %d", sink.sends)
+	}
+}

@@ -36,6 +36,37 @@ Common issues:
 - invalid durations
 - missing `state.path` or `tsnet.state_dir`
 - unsupported `source.mode` or `tsnet.login_mode`
+- unknown `notifier.routes[].event_types` values (use a documented event type or `*`)
+
+## Wildcard routing checks
+
+If you expect all events to be delivered, verify route config contains wildcard:
+
+```yaml
+notifier:
+  routes:
+    - event_types: ["*"]
+      sinks: ["stdout-debug", "webhook-primary"]
+```
+
+If `event_types` omits `*`, only explicitly listed event types are delivered.
+
+## Migrating from presence-only routes
+
+Previous configs commonly used:
+
+```yaml
+event_types: ["peer.online", "peer.offline"]
+```
+
+To include expanded event families, either:
+
+1. Switch to wildcard:
+   - `event_types: ["*"]`
+2. Keep explicit control and add selected types:
+   - `peer.routes.changed`
+   - `daemon.state.changed`
+   - `prefs.run_ssh.changed`
 
 ## Local verification workflow
 

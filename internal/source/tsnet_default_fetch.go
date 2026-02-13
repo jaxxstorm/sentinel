@@ -2,8 +2,11 @@ package source
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,23 +31,24 @@ func DefaultTSNetFetch(ctx context.Context, server *tsnet.Server) (Netmap, error
 	if err != nil {
 		return Netmap{}, fmt.Errorf("marshal status: %w", err)
 	}
-	peers, err := decodePeersFromStatusJSON(statusData)
+	nm, err := decodeNetmapFromStatusJSON(statusData)
 	if err != nil {
 		return Netmap{}, fmt.Errorf("decode status: %w", err)
 	}
 
 	// Fallback to initial NetMap when /status does not expose peers.
-	if len(peers) == 0 {
-		netmapPeers, err := fetchPeersFromIPNBus(ctx, client)
-		if err == nil && len(netmapPeers) > 0 {
-			peers = netmapPeers
+	if len(nm.Peers) == 0 {
+		netmap, err := fetchNetmapFromIPNBus(ctx, client)
+		if err == nil && len(netmap.Peers) > 0 {
+			nm = netmap
 		}
 	}
 
-	return Netmap{PolledAt: time.Now().UTC(), Peers: peers}, nil
+	nm.PolledAt = time.Now().UTC()
+	return nm, nil
 }
 
-func fetchPeersFromIPNBus(ctx context.Context, client *local.Client) ([]Peer, error) {
+func fetchNetmapFromIPNBus(ctx context.Context, client *local.Client) (Netmap, error) {
 	watchCtx := ctx
 	cancel := func() {}
 	if _, ok := ctx.Deadline(); !ok {
@@ -54,45 +58,81 @@ func fetchPeersFromIPNBus(ctx context.Context, client *local.Client) ([]Peer, er
 
 	watcher, err := client.WatchIPNBus(watchCtx, ipn.NotifyInitialState|ipn.NotifyInitialNetMap)
 	if err != nil {
-		return nil, err
+		return Netmap{}, err
 	}
 	defer watcher.Close()
 
 	for {
 		note, err := watcher.Next()
 		if err != nil {
-			return nil, err
+			return Netmap{}, err
+		}
+		if note.State != nil {
+			// Retain state if netmap arrives in a later frame.
+			// LocalClient initial frames can be split by field.
 		}
 		if note.NetMap == nil {
 			continue
 		}
 		netmapData, err := json.Marshal(note.NetMap)
 		if err != nil {
-			return nil, err
+			return Netmap{}, err
 		}
-		return decodePeersFromNetMapJSON(netmapData)
+		nm, err := decodeNetMapJSON(netmapData)
+		if err != nil {
+			return Netmap{}, err
+		}
+		if note.State != nil {
+			nm.DaemonState = note.State.String()
+		}
+		return nm, nil
 	}
 }
 
 func decodePeersFromStatusJSON(data []byte) ([]Peer, error) {
+	nm, err := decodeNetmapFromStatusJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	return nm.Peers, nil
+}
+
+func decodeNetmapFromStatusJSON(data []byte) (Netmap, error) {
 	var raw struct {
-		Peer map[string]map[string]any `json:"Peer"`
+		BackendState   string                    `json:"BackendState"`
+		CurrentTailnet map[string]any            `json:"CurrentTailnet"`
+		Peer           map[string]map[string]any `json:"Peer"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
+		return Netmap{}, err
+	}
+
+	nm := Netmap{DaemonState: strings.TrimSpace(raw.BackendState)}
+	if raw.CurrentTailnet != nil {
+		nm.Tailnet.Domain = firstNonEmpty(
+			stringVal(raw.CurrentTailnet, "Name"),
+			stringVal(raw.CurrentTailnet, "MagicDNSSuffix"),
+		)
 	}
 
 	peers := make([]Peer, 0, len(raw.Peer))
 	for fallbackID, peer := range raw.Peer {
 		p := Peer{
-			ID:     firstNonEmpty(stringVal(peer, "StableID"), fallbackID),
-			Name:   firstNonEmpty(stringVal(peer, "HostName"), hostFromDNSName(stringVal(peer, "DNSName"))),
-			Online: boolVal(peer, "Online"),
-			Tags:   stringSliceVal(peer, "Tags"),
+			ID:                firstNonEmpty(stringVal(peer, "StableID"), fallbackID),
+			Name:              firstNonEmpty(stringVal(peer, "HostName"), hostFromDNSName(stringVal(peer, "DNSName"))),
+			Online:            boolVal(peer, "Online"),
+			Tags:              sortedCopy(stringSliceVal(peer, "Tags")),
+			Routes:            sortedCopy(stringSliceVal(peer, "PrimaryRoutes")),
+			MachineAuthorized: boolVal(peer, "MachineAuthorized"),
+			Expired:           boolVal(peer, "Expired"),
+			KeyExpiry:         anyToString(peer["KeyExpiry"]),
 		}
 		meta := map[string]string{}
 		if v := stringVal(peer, "OS"); v != "" {
 			meta["os"] = v
+		}
+		if hostinfo := mapVal(peer, "Hostinfo"); hostinfo != nil {
+			p.HostinfoHash = stableMapHash(hostinfo)
 		}
 		if v := anyToString(peer["UserID"]); v != "" {
 			meta["user_id"] = v
@@ -105,27 +145,50 @@ func decodePeersFromStatusJSON(data []byte) ([]Peer, error) {
 		}
 		peers = append(peers, p)
 	}
-	return peers, nil
+	nm.Peers = peers
+	return nm, nil
 }
 
 func decodePeersFromNetMapJSON(data []byte) ([]Peer, error) {
+	nm, err := decodeNetMapJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	return nm.Peers, nil
+}
+
+func decodeNetMapJSON(data []byte) (Netmap, error) {
 	var raw struct {
-		Peers []map[string]any `json:"Peers"`
+		Domain     string           `json:"Domain"`
+		TKAEnabled bool             `json:"TKAEnabled"`
+		Peers      []map[string]any `json:"Peers"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
+		return Netmap{}, err
+	}
+
+	nm := Netmap{
+		Tailnet: Tailnet{
+			Domain:     strings.TrimSpace(raw.Domain),
+			TKAEnabled: raw.TKAEnabled,
+		},
 	}
 
 	peers := make([]Peer, 0, len(raw.Peers))
 	for _, node := range raw.Peers {
 		p := Peer{
-			ID:     firstNonEmpty(stringVal(node, "StableID"), anyToString(node["ID"])),
-			Name:   firstNonEmpty(stringVal(node, "ComputedName"), hostFromDNSName(stringVal(node, "Name"))),
-			Online: boolVal(node, "Online"),
-			Tags:   stringSliceVal(node, "Tags"),
+			ID:                firstNonEmpty(stringVal(node, "StableID"), anyToString(node["ID"])),
+			Name:              firstNonEmpty(stringVal(node, "ComputedName"), hostFromDNSName(stringVal(node, "Name"))),
+			Online:            boolVal(node, "Online"),
+			Tags:              sortedCopy(stringSliceVal(node, "Tags")),
+			Routes:            sortedCopy(stringSliceVal(node, "PrimaryRoutes")),
+			MachineAuthorized: boolVal(node, "MachineAuthorized"),
+			Expired:           boolVal(node, "Expired"),
+			KeyExpiry:         anyToString(node["KeyExpiry"]),
 		}
 		meta := map[string]string{}
 		if hostinfo := mapVal(node, "Hostinfo"); hostinfo != nil {
+			p.HostinfoHash = stableMapHash(hostinfo)
 			if v := stringVal(hostinfo, "OS"); v != "" {
 				meta["os"] = v
 			}
@@ -144,7 +207,8 @@ func decodePeersFromNetMapJSON(data []byte) ([]Peer, error) {
 		}
 		peers = append(peers, p)
 	}
-	return peers, nil
+	nm.Peers = peers
+	return nm, nil
 }
 
 func stringVal(m map[string]any, key string) string {
@@ -240,4 +304,25 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func sortedCopy(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := append([]string(nil), items...)
+	sort.Strings(out)
+	return out
+}
+
+func stableMapHash(m map[string]any) string {
+	if len(m) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }

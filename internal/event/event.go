@@ -11,11 +11,59 @@ import (
 const (
 	SchemaVersion = "v1"
 
+	SubjectPeer    = "peer"
+	SubjectDaemon  = "daemon"
+	SubjectPrefs   = "prefs"
+	SubjectTailnet = "tailnet"
+
 	TypePeerOnline  = "peer.online"
 	TypePeerOffline = "peer.offline"
+	TypePeerAdded   = "peer.added"
+	TypePeerRemoved = "peer.removed"
+
+	TypePeerRoutesChanged            = "peer.routes.changed"
+	TypePeerTagsChanged              = "peer.tags.changed"
+	TypePeerMachineAuthorizedChanged = "peer.machine_authorized.changed"
+	TypePeerKeyExpiryChanged         = "peer.key_expiry.changed"
+	TypePeerKeyExpired               = "peer.key_expired"
+	TypePeerHostinfoChanged          = "peer.hostinfo.changed"
+
+	TypeDaemonStateChanged = "daemon.state.changed"
+
+	TypePrefsAdvertiseRoutesChanged = "prefs.advertise_routes.changed"
+	TypePrefsExitNodeChanged        = "prefs.exit_node.changed"
+	TypePrefsRunSSHChanged          = "prefs.run_ssh.changed"
+	TypePrefsShieldsUpChanged       = "prefs.shields_up.changed"
+
+	TypeTailnetDomainChanged     = "tailnet.domain.changed"
+	TypeTailnetTKAEnabledChanged = "tailnet.tka_enabled.changed"
 
 	SeverityInfo = "info"
 )
+
+var knownEventTypes = map[string]struct{}{
+	TypePeerOnline:  {},
+	TypePeerOffline: {},
+	TypePeerAdded:   {},
+	TypePeerRemoved: {},
+
+	TypePeerRoutesChanged:            {},
+	TypePeerTagsChanged:              {},
+	TypePeerMachineAuthorizedChanged: {},
+	TypePeerKeyExpiryChanged:         {},
+	TypePeerKeyExpired:               {},
+	TypePeerHostinfoChanged:          {},
+
+	TypeDaemonStateChanged: {},
+
+	TypePrefsAdvertiseRoutesChanged: {},
+	TypePrefsExitNodeChanged:        {},
+	TypePrefsRunSSHChanged:          {},
+	TypePrefsShieldsUpChanged:       {},
+
+	TypeTailnetDomainChanged:     {},
+	TypeTailnetTKAEnabledChanged: {},
+}
 
 type Event struct {
 	SchemaVersion string         `json:"schema_version"`
@@ -30,20 +78,45 @@ type Event struct {
 	Payload       map[string]any `json:"payload,omitempty"`
 }
 
-func NewPresenceEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+func IsKnownType(eventType string) bool {
+	_, ok := knownEventTypes[eventType]
+	return ok
+}
+
+func NewEvent(eventType, subjectType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
 	e := Event{
 		SchemaVersion: SchemaVersion,
 		EventType:     eventType,
 		Severity:      SeverityInfo,
 		Timestamp:     now.UTC(),
 		SubjectID:     subjectID,
-		SubjectType:   "peer",
+		SubjectType:   subjectType,
 		BeforeHash:    beforeHash,
 		AfterHash:     afterHash,
 		Payload:       payload,
 	}
 	e.EventID = DeriveEventID(e)
 	return e
+}
+
+func NewPeerEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+	return NewEvent(eventType, SubjectPeer, subjectID, beforeHash, afterHash, payload, now)
+}
+
+func NewDaemonEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+	return NewEvent(eventType, SubjectDaemon, subjectID, beforeHash, afterHash, payload, now)
+}
+
+func NewPrefsEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+	return NewEvent(eventType, SubjectPrefs, subjectID, beforeHash, afterHash, payload, now)
+}
+
+func NewTailnetEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+	return NewEvent(eventType, SubjectTailnet, subjectID, beforeHash, afterHash, payload, now)
+}
+
+func NewPresenceEvent(eventType, subjectID, beforeHash, afterHash string, payload map[string]any, now time.Time) Event {
+	return NewPeerEvent(eventType, subjectID, beforeHash, afterHash, payload, now)
 }
 
 func DeriveEventID(e Event) string {

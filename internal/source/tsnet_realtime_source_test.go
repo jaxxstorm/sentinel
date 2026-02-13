@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -71,9 +72,30 @@ func notifyWithPeer(stableID, name string, online bool) ipn.Notify {
 
 	return ipn.Notify{
 		NetMap: &netmap.NetworkMap{
-			Peers: []tailcfg.NodeView{node},
+			Domain: "tail.test",
+			Peers:  []tailcfg.NodeView{node},
 		},
 	}
+}
+
+func notifyWithPrefs(runSSH bool, shieldsUp bool, exitNode string, advertiseRoutes []string) ipn.Notify {
+	routes := make([]netip.Prefix, 0, len(advertiseRoutes))
+	for _, raw := range advertiseRoutes {
+		p, err := netip.ParsePrefix(raw)
+		if err == nil {
+			routes = append(routes, p)
+		}
+	}
+	prefs := &ipn.Prefs{
+		RunSSH:          runSSH,
+		ShieldsUp:       shieldsUp,
+		AdvertiseRoutes: routes,
+	}
+	if exitNode != "" {
+		prefs.ExitNodeID = tailcfg.StableNodeID(exitNode)
+	}
+	view := prefs.View()
+	return ipn.Notify{Prefs: &view}
 }
 
 func TestTSNetRealtimeSourceBootstrapsFromInitialNetmap(t *testing.T) {
@@ -200,5 +222,64 @@ func TestTSNetRealtimeSourceStopsOnContextCancellation(t *testing.T) {
 	_, err := src.Poll(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation error, got %v", err)
+	}
+}
+
+func TestTSNetRealtimeSourceEmitsPrefsAndStateAfterBaseline(t *testing.T) {
+	running := ipn.Running
+	watcher := &fakeIPNBusWatcher{
+		steps: []watchStep{
+			{note: notifyWithPeer("peer-a", "peer-a", true)},
+			{note: ipn.Notify{State: &running}},
+			{note: notifyWithPrefs(true, true, "node-a", []string{"10.0.0.0/24"})},
+		},
+	}
+
+	src := NewTSNetRealtimeSource(&tsnet.Server{}, RealtimeConfig{
+		Logger:       zap.NewNop(),
+		ReconnectMin: time.Millisecond,
+		ReconnectMax: 5 * time.Millisecond,
+		NewLocalClient: func(*tsnet.Server) (*local.Client, error) {
+			return &local.Client{}, nil
+		},
+		NewWatcher: func(context.Context, *local.Client, ipn.NotifyWatchOpt) (IPNBusWatcher, error) {
+			return watcher, nil
+		},
+	})
+
+	first, err := src.Poll(context.Background())
+	if err != nil {
+		t.Fatalf("first poll failed: %v", err)
+	}
+	if len(first.Peers) != 1 {
+		t.Fatalf("expected baseline peer, got %#v", first.Peers)
+	}
+	if first.DaemonState != "" {
+		t.Fatalf("expected no daemon state before state update, got %q", first.DaemonState)
+	}
+
+	second, err := src.Poll(context.Background())
+	if err != nil {
+		t.Fatalf("second poll failed: %v", err)
+	}
+	if second.DaemonState != ipn.Running.String() {
+		t.Fatalf("expected daemon state %q, got %q", ipn.Running.String(), second.DaemonState)
+	}
+	if len(second.Peers) != 1 {
+		t.Fatalf("expected cached peers to be preserved, got %#v", second.Peers)
+	}
+
+	third, err := src.Poll(context.Background())
+	if err != nil {
+		t.Fatalf("third poll failed: %v", err)
+	}
+	if !third.Prefs.RunSSH || !third.Prefs.ShieldsUp {
+		t.Fatalf("expected prefs RunSSH/ShieldsUp true, got %#v", third.Prefs)
+	}
+	if third.Prefs.ExitNodeID != "node-a" {
+		t.Fatalf("expected ExitNodeID node-a, got %q", third.Prefs.ExitNodeID)
+	}
+	if len(third.Prefs.AdvertiseRoutes) != 1 || third.Prefs.AdvertiseRoutes[0] != "10.0.0.0/24" {
+		t.Fatalf("expected advertise route to be populated, got %#v", third.Prefs.AdvertiseRoutes)
 	}
 }

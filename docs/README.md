@@ -22,4 +22,5 @@ Use this documentation for day-to-day operation:
 
 - Default `source.mode` is `realtime` (IPNBus stream).
 - Default notifier behavior includes a local `stdout-debug` sink.
+- Route `event_types` supports wildcard `*` to match all emitted event families.
 - Runtime logs include `log_source` values: `sentinel`, `tailscale`, and `sink`.

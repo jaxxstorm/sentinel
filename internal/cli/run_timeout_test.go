@@ -55,6 +55,8 @@ func (s errorSource) Poll(context.Context) (source.Netmap, error) {
 func newRuntimeDepsForExecuteRunTest(t *testing.T, src source.NetmapSource) *runtimeDeps {
 	t.Helper()
 	cfg := config.Default()
+	cfg.DetectorOrder = []string{"presence"}
+	cfg.Detectors["presence"] = config.Detector{Enabled: true}
 	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
 	r := app.NewRunner(
 		cfg,

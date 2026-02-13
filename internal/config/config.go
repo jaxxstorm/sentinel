@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jaxxstorm/sentinel/internal/event"
 	"github.com/spf13/viper"
 )
 
@@ -89,9 +90,11 @@ func Default() Config {
 			Mode: "realtime",
 		},
 		Detectors: map[string]Detector{
-			"presence": {Enabled: true},
+			"presence":     {Enabled: true},
+			"peer_changes": {Enabled: true},
+			"runtime":      {Enabled: true},
 		},
-		DetectorOrder: []string{"presence"},
+		DetectorOrder: []string{"presence", "peer_changes", "runtime"},
 		Policy: PolicyConfig{
 			DebounceWindow:    3 * time.Second,
 			SuppressionWindow: 0,
@@ -101,7 +104,7 @@ func Default() Config {
 		Notifier: NotifierConfig{
 			IdempotencyKeyTTL: 24 * time.Hour,
 			Routes: []RouteConfig{{
-				EventTypes: []string{"peer.online", "peer.offline"},
+				EventTypes: []string{"*"},
 				Sinks:      []string{"stdout-debug"},
 			}},
 			Sinks: []SinkConfig{
@@ -221,6 +224,20 @@ func Validate(cfg Config) error {
 	case "", "realtime", "poll":
 	default:
 		return fmt.Errorf("source.mode must be realtime or poll")
+	}
+	for i, route := range cfg.Notifier.Routes {
+		if len(route.EventTypes) == 0 {
+			return fmt.Errorf("notifier.routes[%d].event_types must not be empty", i)
+		}
+		for j, et := range route.EventTypes {
+			et = strings.TrimSpace(et)
+			if et == "" {
+				return fmt.Errorf("notifier.routes[%d].event_types[%d] must not be empty", i, j)
+			}
+			if et != "*" && !event.IsKnownType(et) {
+				return fmt.Errorf("notifier.routes[%d].event_types[%d] has unknown value %q", i, j, et)
+			}
+		}
 	}
 	return nil
 }

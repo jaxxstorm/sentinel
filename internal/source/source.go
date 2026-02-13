@@ -11,16 +11,37 @@ import (
 )
 
 type Peer struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Online   bool              `json:"online"`
-	Tags     []string          `json:"tags,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Online            bool              `json:"online"`
+	Tags              []string          `json:"tags,omitempty"`
+	Routes            []string          `json:"routes,omitempty"`
+	MachineAuthorized bool              `json:"machine_authorized,omitempty"`
+	Expired           bool              `json:"expired,omitempty"`
+	KeyExpiry         string            `json:"key_expiry,omitempty"`
+	HostinfoHash      string            `json:"hostinfo_hash,omitempty"`
+	Metadata          map[string]string `json:"metadata,omitempty"`
+}
+
+type Prefs struct {
+	AdvertiseRoutes []string `json:"advertise_routes,omitempty"`
+	ExitNodeID      string   `json:"exit_node_id,omitempty"`
+	RunSSH          bool     `json:"run_ssh,omitempty"`
+	ShieldsUp       bool     `json:"shields_up,omitempty"`
+}
+
+type Tailnet struct {
+	Domain     string `json:"domain,omitempty"`
+	TKAEnabled bool   `json:"tka_enabled,omitempty"`
 }
 
 type Netmap struct {
-	PolledAt time.Time `json:"polled_at"`
-	Peers    []Peer    `json:"peers"`
+	PolledAt     time.Time `json:"polled_at"`
+	Peers        []Peer    `json:"peers"`
+	DaemonState  string    `json:"daemon_state,omitempty"`
+	Prefs        Prefs     `json:"prefs,omitempty"`
+	Tailnet      Tailnet   `json:"tailnet,omitempty"`
+	ErrorMessage string    `json:"error_message,omitempty"`
 }
 
 type NetmapSource interface {

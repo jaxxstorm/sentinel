@@ -20,9 +20,15 @@ source:
 detectors:
   presence:
     enabled: true
+  peer_changes:
+    enabled: true
+  runtime:
+    enabled: true
 
 detector_order:
   - presence
+  - peer_changes
+  - runtime
 
 policy:
   debounce_window: 3s
@@ -48,9 +54,15 @@ notifier:
       url: ${SENTINEL_WEBHOOK_URL}
 
   routes:
-    - event_types: ["peer.online", "peer.offline"]
+    # Use "*" to match all emitted event types.
+    - event_types: ["*"]
       severities: []
       sinks: ["stdout-debug", "webhook-primary"]
+
+    # Example explicit route:
+    # - event_types: ["peer.online", "peer.offline", "peer.routes.changed", "daemon.state.changed"]
+    #   severities: []
+    #   sinks: ["stdout-debug"]
 
 state:
   path: .sentinel/state.json

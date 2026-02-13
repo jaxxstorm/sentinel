@@ -40,7 +40,7 @@ WARN webhook send failed {"log_source":"sink","sink":"webhook-primary","status_c
 
 Routes match by:
 
-- `event_types` (for example `peer.online`, `peer.offline`)
+- `event_types` (explicit values or `*` for all event types)
 - optional `severities`
 - list of target sink names
 
@@ -48,12 +48,33 @@ Example:
 
 ```yaml
 routes:
-  - event_types: ["peer.online", "peer.offline"]
+  - event_types: ["*"]
     severities: []
     sinks: ["stdout-debug", "webhook-primary"]
 ```
 
+Explicit matching is still supported:
+
+```yaml
+routes:
+  - event_types: ["peer.online", "peer.offline", "peer.routes.changed"]
+    sinks: ["webhook-primary"]
+```
+
+If `*` appears in a route's `event_types`, that route is treated as match-all even when literal values are also present.
+
 If a configured route has no available sinks at runtime, Sentinel falls back to `stdout-debug`.
+
+## Event Type Catalog
+
+Current event families include:
+
+- `peer.online`, `peer.offline`, `peer.added`, `peer.removed`
+- `peer.routes.changed`, `peer.tags.changed`
+- `peer.machine_authorized.changed`, `peer.key_expiry.changed`, `peer.key_expired`, `peer.hostinfo.changed`
+- `daemon.state.changed`
+- `prefs.advertise_routes.changed`, `prefs.exit_node.changed`, `prefs.run_ssh.changed`, `prefs.shields_up.changed`
+- `tailnet.domain.changed`, `tailnet.tka_enabled.changed`
 
 ## Dry-Run Validation
 

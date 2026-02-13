@@ -99,7 +99,7 @@ func (n *Notifier) Notify(ctx context.Context, events []event.Event, dryRun bool
 func (n *Notifier) targetsFor(evt event.Event) []string {
 	out := []string{}
 	for _, r := range n.cfg.Routes {
-		if len(r.EventTypes) > 0 && !contains(r.EventTypes, evt.EventType) {
+		if len(r.EventTypes) > 0 && !matchesEventType(r.EventTypes, evt.EventType) {
 			continue
 		}
 		if len(r.Severities) > 0 && !contains(r.Severities, evt.Severity) {
@@ -108,6 +108,18 @@ func (n *Notifier) targetsFor(evt event.Event) []string {
 		out = append(out, r.Sinks...)
 	}
 	return uniq(out)
+}
+
+func matchesEventType(items []string, target string) bool {
+	for _, item := range items {
+		if item == "*" {
+			return true
+		}
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func contains(items []string, target string) bool {

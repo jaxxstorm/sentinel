@@ -24,8 +24,10 @@ Backoff window used when source polling/watch operations fail.
 - `mode`: `realtime` (default) or `poll`
 
 ### `detectors`
-Detector enablement map. Current baseline detector:
+Detector enablement map. Built-in detectors:
 - `presence.enabled`
+- `peer_changes.enabled`
+- `runtime.enabled`
 
 ### `detector_order`
 Ordered list of enabled detector names.
@@ -40,6 +42,7 @@ Ordered list of enabled detector names.
 - `idempotency_key_ttl`
 - `sinks`: sink definitions
 - `routes`: routing rules by event type and severity
+  - `event_types` supports explicit values (for example `peer.online`) and wildcard `*` (match all event types)
 
 ### `state`
 - `path`: state file path

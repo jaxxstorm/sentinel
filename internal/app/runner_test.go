@@ -64,6 +64,11 @@ type fakeSource struct {
 	assertFunc func() error
 }
 
+func configurePresenceOnly(cfg *config.Config) {
+	cfg.DetectorOrder = []string{"presence"}
+	cfg.Detectors["presence"] = config.Detector{Enabled: true}
+}
+
 func (s *fakeSource) Poll(context.Context) (source.Netmap, error) {
 	s.polls++
 	if s.assertFunc != nil {
@@ -76,8 +81,7 @@ func (s *fakeSource) Poll(context.Context) (source.Netmap, error) {
 
 func TestRunOnceDryRunPipeline(t *testing.T) {
 	cfg := config.Default()
-	cfg.DetectorOrder = []string{"presence"}
-	cfg.Detectors["presence"] = config.Detector{Enabled: true}
+	configurePresenceOnly(&cfg)
 	cfg.Notifier.Routes = []config.RouteConfig{{EventTypes: []string{event.TypePeerOnline, event.TypePeerOffline}, Sinks: []string{"webhook-primary"}}}
 	cfg.Policy.BatchSize = 10
 
@@ -114,6 +118,7 @@ func TestRunOnceDryRunPipeline(t *testing.T) {
 
 func TestRunOnceReturnsErrorWhenEnrollmentFails(t *testing.T) {
 	cfg := config.Default()
+	configurePresenceOnly(&cfg)
 	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
 	em := &fakeEnrollmentManager{
 		ensure: func(context.Context) (onboarding.Status, error) {
@@ -138,6 +143,7 @@ func TestRunOnceReturnsErrorWhenEnrollmentFails(t *testing.T) {
 
 func TestRunOnceGatesPollingOnEnrollment(t *testing.T) {
 	cfg := config.Default()
+	configurePresenceOnly(&cfg)
 	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
 	em := &fakeEnrollmentManager{}
 	src := &fakeSource{assertFunc: func() error {
@@ -167,6 +173,7 @@ func TestRunOnceGatesPollingOnEnrollment(t *testing.T) {
 
 func TestRunOnceLogsEventJSONWithoutConfiguredSinks(t *testing.T) {
 	cfg := config.Default()
+	configurePresenceOnly(&cfg)
 	cfg.Notifier.Routes = nil
 	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
 	core, logs := observer.New(zapcore.InfoLevel)
@@ -204,6 +211,7 @@ func TestRunOnceLogsEventJSONWithoutConfiguredSinks(t *testing.T) {
 
 func TestRunOnceEnrollmentCompleteLogsOnlyOnStatusChange(t *testing.T) {
 	cfg := config.Default()
+	configurePresenceOnly(&cfg)
 	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
 	core, logs := observer.New(zapcore.InfoLevel)
 	logger := zap.New(core)

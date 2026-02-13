@@ -135,3 +135,44 @@ func TestLoadExpandsMissingNotifierSinkURLToEmpty(t *testing.T) {
 		t.Fatalf("expected missing env expansion to produce empty string, got %q", cfg.Notifier.Sinks[0].URL)
 	}
 }
+
+func TestValidateAcceptsWildcardNotifierRoute(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+	}}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected wildcard route to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownNotifierEventType(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"peer.unknown"},
+		Sinks:      []string{"stdout-debug"},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for unknown notifier event type")
+	}
+	if !strings.Contains(err.Error(), "unknown value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsEmptyNotifierEventTypes(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{},
+		Sinks:      []string{"stdout-debug"},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for empty notifier event types")
+	}
+	if !strings.Contains(err.Error(), "must not be empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

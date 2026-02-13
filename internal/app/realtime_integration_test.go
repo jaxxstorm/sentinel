@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/netip"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,6 +57,26 @@ func realtimeNotify(stableID string, online bool) ipn.Notify {
 		ComputedName: stableID,
 		Online:       &on,
 		User:         tailcfg.UserID(7),
+	}).View()
+	return ipn.Notify{NetMap: &netmap.NetworkMap{Peers: []tailcfg.NodeView{node}}}
+}
+
+func realtimeNotifyWithRoutes(stableID string, online bool, routes []string) ipn.Notify {
+	on := online
+	primaryRoutes := make([]netip.Prefix, 0, len(routes))
+	for _, raw := range routes {
+		if p, err := netip.ParsePrefix(raw); err == nil {
+			primaryRoutes = append(primaryRoutes, p)
+		}
+	}
+	node := (&tailcfg.Node{
+		ID:            tailcfg.NodeID(1),
+		StableID:      tailcfg.StableNodeID(stableID),
+		Name:          stableID + ".tail.test.",
+		ComputedName:  stableID,
+		Online:        &on,
+		PrimaryRoutes: primaryRoutes,
+		User:          tailcfg.UserID(7),
 	}).View()
 	return ipn.Notify{NetMap: &netmap.NetworkMap{Peers: []tailcfg.NodeView{node}}}
 }
@@ -211,5 +232,147 @@ func TestRealtimeRunnerSkipsNoOpSnapshotUpdates(t *testing.T) {
 	}
 	if sink.sent != 1 {
 		t.Fatalf("expected sink send count to remain 1 after no-op, got %d", sink.sent)
+	}
+}
+
+func TestRealtimeRunnerWildcardRouteDeliversExpandedEvents(t *testing.T) {
+	cfg := config.Default()
+	cfg.Source.Mode = "realtime"
+	cfg.DetectorOrder = []string{"presence", "peer_changes", "runtime"}
+	cfg.Detectors["presence"] = config.Detector{Enabled: true}
+	cfg.Detectors["peer_changes"] = config.Detector{Enabled: true}
+	cfg.Detectors["runtime"] = config.Detector{Enabled: true}
+	cfg.Policy.BatchSize = 10
+
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{}
+	notifier := notify.New(notify.Config{
+		Routes: []notify.Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{sink.Name()},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}, store, []notify.Sink{sink})
+
+	watcher := &realtimeWatcher{
+		steps: []realtimeWatchStep{
+			{note: realtimeNotifyWithRoutes("peer-routes", true, []string{"10.0.0.0/24"})},
+			{note: realtimeNotifyWithRoutes("peer-routes", true, []string{"10.1.0.0/24"})},
+		},
+	}
+	src := source.NewTSNetRealtimeSource(&tsnet.Server{}, source.RealtimeConfig{
+		Logger:       zap.NewNop(),
+		ReconnectMin: time.Millisecond,
+		ReconnectMax: 5 * time.Millisecond,
+		NewLocalClient: func(*tsnet.Server) (*local.Client, error) {
+			return &local.Client{}, nil
+		},
+		NewWatcher: func(context.Context, *local.Client, ipn.NotifyWatchOpt) (source.IPNBusWatcher, error) {
+			return watcher, nil
+		},
+	})
+
+	runner := NewRunner(
+		cfg,
+		src,
+		diff.NewEngine([]diff.Detector{
+			diff.NewPresenceDetector(),
+			diff.NewPeerChangeDetector(),
+			diff.NewRuntimeDetector(),
+		}),
+		policy.NewEngine(policy.Config{BatchSize: 10}),
+		notifier,
+		store,
+		nil,
+		zap.NewNop(),
+		nil,
+	)
+
+	first, err := runner.RunOnce(context.Background(), false)
+	if err != nil {
+		t.Fatalf("first run failed: %v", err)
+	}
+	if len(first.Events) == 0 {
+		t.Fatal("expected first run to emit events")
+	}
+	firstSends := sink.sent
+
+	second, err := runner.RunOnce(context.Background(), false)
+	if err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+	foundRoutesChanged := false
+	for _, evt := range second.Events {
+		if evt.EventType == event.TypePeerRoutesChanged {
+			foundRoutesChanged = true
+			break
+		}
+	}
+	if !foundRoutesChanged {
+		t.Fatalf("expected %q event, got %#v", event.TypePeerRoutesChanged, second.Events)
+	}
+	if sink.sent <= firstSends {
+		t.Fatalf("expected wildcard route to deliver second batch, sends first=%d now=%d", firstSends, sink.sent)
+	}
+}
+
+func TestRealtimeRunnerPresenceDeliveryUnchangedWithExplicitRoute(t *testing.T) {
+	cfg := config.Default()
+	cfg.Source.Mode = "realtime"
+	cfg.DetectorOrder = []string{"presence", "peer_changes"}
+	cfg.Detectors["presence"] = config.Detector{Enabled: true}
+	cfg.Detectors["peer_changes"] = config.Detector{Enabled: true}
+	cfg.Policy.BatchSize = 10
+
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{}
+	notifier := notify.New(notify.Config{
+		Routes: []notify.Route{{
+			EventTypes: []string{event.TypePeerOnline, event.TypePeerOffline},
+			Sinks:      []string{sink.Name()},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}, store, []notify.Sink{sink})
+
+	watcher := &realtimeWatcher{
+		steps: []realtimeWatchStep{{note: realtimeNotify("peer-explicit", true)}},
+	}
+	src := source.NewTSNetRealtimeSource(&tsnet.Server{}, source.RealtimeConfig{
+		Logger:       zap.NewNop(),
+		ReconnectMin: time.Millisecond,
+		ReconnectMax: 5 * time.Millisecond,
+		NewLocalClient: func(*tsnet.Server) (*local.Client, error) {
+			return &local.Client{}, nil
+		},
+		NewWatcher: func(context.Context, *local.Client, ipn.NotifyWatchOpt) (source.IPNBusWatcher, error) {
+			return watcher, nil
+		},
+	})
+
+	runner := NewRunner(
+		cfg,
+		src,
+		diff.NewEngine([]diff.Detector{
+			diff.NewPresenceDetector(),
+			diff.NewPeerChangeDetector(),
+		}),
+		policy.NewEngine(policy.Config{BatchSize: 10}),
+		notifier,
+		store,
+		nil,
+		zap.NewNop(),
+		nil,
+	)
+
+	res, err := runner.RunOnce(context.Background(), false)
+	if err != nil {
+		t.Fatalf("run once failed: %v", err)
+	}
+	if len(res.Events) < 1 {
+		t.Fatal("expected at least one event")
+	}
+	// Presence + peer.added are generated, but explicit route should only deliver peer.online.
+	if sink.sent != 1 {
+		t.Fatalf("expected explicit presence route to deliver one notification, got %d", sink.sent)
 	}
 }
