@@ -1,0 +1,9 @@
+services:
+  sentinel:
+    image: jaxxstorm/sentinel
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/sentinel/config.yaml

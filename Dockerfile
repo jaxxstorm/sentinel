@@ -1,4 +1,4 @@
-FROM golang:1.24.0-alpine3.23 AS builder
+FROM golang:1.26.0-alpine3.23 AS builder
 
 WORKDIR /sentinel
 
@@ -31,3 +31,4 @@ ENV SENTINEL_CONFIG_PATH=/sentinel/config.yaml
 ENV PATH=$PATH:/sentinel
 
 ENTRYPOINT ["sentinel"]
+CMD ["run"]
