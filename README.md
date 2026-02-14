@@ -2,6 +2,10 @@
 
 Sentinel is a tsnet-embedded Tailscale observer. It tracks tailnet netmap changes, detects meaningful diffs, and sends notifications through configurable sinks.
 
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/OyPzYt?referralCode=ftkvtR&utm_medium=integration&utm_source=template&utm_campaign=generic)
+
+
+
 ## Features
 
 - Realtime observation via Tailscale IPNBus (`source.mode: realtime`)
