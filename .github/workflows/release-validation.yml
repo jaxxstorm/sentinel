@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate workflow syntax
-        uses: rhysd/actionlint@v1
+        uses: rhysd/actionlint@a674911337c7576e05c10dd9281f7f2c7dcbd1ae
 
       - name: Summarize duration
         id: duration
