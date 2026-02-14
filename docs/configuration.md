@@ -82,6 +82,9 @@ Ordered list of enabled detector names.
 
 ## Environment Variable Matrix
 
+For required/optional semantics as used by repository compose templates (including Railway import),
+see [Docker Compose and Railway](docker-compose.md).
+
 ### Common scalar overrides
 
 | Env var | Config key |

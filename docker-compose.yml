@@ -1,9 +1,21 @@
+name: sentinel
+
 services:
   sentinel:
-    image: jaxxstorm/sentinel
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${SENTINEL_IMAGE:-ghcr.io/jaxxstorm/sentinel:latest}
     restart: unless-stopped
-    volumes:
-      - ./config.yaml:/sentinel/config.yaml
+    environment:
+      # Required (login_mode defaults to auth_key)
+      SENTINEL_TAILSCALE_AUTH_KEY: ${SENTINEL_TAILSCALE_AUTH_KEY:?set SENTINEL_TAILSCALE_AUTH_KEY}
+
+      # Optional overrides (uncomment only what you need)
+      # SENTINEL_TSNET_LOGIN_MODE: oauth
+      # SENTINEL_TSNET_AUTH_KEY: ${SENTINEL_TSNET_AUTH_KEY}
+      # SENTINEL_TSNET_CLIENT_SECRET: ${SENTINEL_TSNET_CLIENT_SECRET}
+      # SENTINEL_TSNET_CLIENT_ID: ${SENTINEL_TSNET_CLIENT_ID}
+      # SENTINEL_TSNET_ID_TOKEN: ${SENTINEL_TSNET_ID_TOKEN}
+      # SENTINEL_TSNET_AUDIENCE: ${SENTINEL_TSNET_AUDIENCE}
+      # SENTINEL_TSNET_ADVERTISE_TAGS: '["tag:sentinel"]'
+      # SENTINEL_NOTIFIER_SINKS: '[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"${SENTINEL_DISCORD_WEBHOOK_URL}"}]'
+      # SENTINEL_NOTIFIER_ROUTES: '[{"event_types":["*"],"sinks":["stdout-debug","discord-primary"]}]'
+      # SENTINEL_DISCORD_WEBHOOK_URL: ${SENTINEL_DISCORD_WEBHOOK_URL}

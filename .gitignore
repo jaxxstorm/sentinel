@@ -3,5 +3,9 @@
 # config file
 config.yaml
 
+.env
+.env.*
+!.env.example
+
 .gocache
 .gomodcache

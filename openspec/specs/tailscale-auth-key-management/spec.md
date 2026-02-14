@@ -11,11 +11,15 @@ Sentinel SHALL accept a Tailscale auth key from CLI flag, environment variable, 
 - **THEN** Sentinel uses that key for enrollment if a higher-precedence source is not present
 
 ### Requirement: Sentinel SHALL enforce auth key precedence
-Sentinel SHALL resolve auth key precedence as CLI flag over environment variable over configuration file.
+Sentinel SHALL resolve auth key precedence as CLI flag over environment variable over configuration file, and SHALL treat an available auth key as higher precedence than OAuth credential onboarding sources.
 
 #### Scenario: CLI flag overrides environment and config
 - **WHEN** auth key values are present in flag, env, and config
 - **THEN** Sentinel uses the flag value and ignores lower-precedence sources
+
+#### Scenario: Auth key takes precedence over OAuth credentials
+- **WHEN** Sentinel has both a resolved auth key and valid OAuth credential inputs
+- **THEN** Sentinel uses auth-key onboarding and does not switch to OAuth mode
 
 ### Requirement: Sentinel SHALL validate and redact auth key material
 Sentinel SHALL validate auth key presence/format before enrollment and MUST redact raw auth key values from logs, status, and error messages.
@@ -30,4 +34,3 @@ Sentinel SHALL support a configuration switch controlling whether interactive lo
 #### Scenario: Interactive fallback is disabled
 - **WHEN** auth key enrollment fails and fallback is disabled
 - **THEN** Sentinel reports auth failure and does not initiate interactive login
-

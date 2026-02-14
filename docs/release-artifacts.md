@@ -17,14 +17,18 @@ GoReleaser is intentionally binary-only in this project. It does not build or pu
 ## Container Releases (GHCR Workflow)
 
 - Workflow: `.github/workflows/publish-image.yml`
-- Trigger: push tag matching `v*.*.*` (and prerelease `v*.*.*-*`)
+- Trigger:
+  - push to `main` (maintains default `latest` track)
+  - push tag matching `v*.*.*` (and prerelease `v*.*.*-*`)
 - Registry: `ghcr.io/<owner>/<repo>`
 - Output tags:
-  - semantic version tags (for example `v1.2.3`, `v1.2`, `v1`)
-  - commit tag (`sha-<fullsha>`)
-  - optional `latest` (for stable semver tags via Docker metadata action)
+  - on `main`: `latest`, `sha-<fullsha>`
+  - on semver tags: `vX.Y.Z`, `vX.Y`, `vX`, `sha-<fullsha>`
 
 The image workflow runs independently from GoReleaser.
+
+The repository compose template defaults to `ghcr.io/<owner>/<repo>:latest`.
+Pin a version tag if you need immutable deploy inputs.
 
 Runtime configuration for container users, including environment variables, is documented in [`Docker Image`](docker-image.md).
 

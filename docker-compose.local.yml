@@ -1,0 +1,13 @@
+services:
+  sentinel:
+    image: sentinel:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TAG_NAME: ${TAG_NAME:-v0.0.0-dev}
+        COMMIT_HASH: ${COMMIT_HASH:-local}
+        BUILD_TIMESTAMP: ${BUILD_TIMESTAMP:-1970-01-01T00:00:00Z}
+    volumes:
+      - ./.sentinel:/data

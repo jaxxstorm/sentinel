@@ -208,7 +208,7 @@ func Load(path string) (Config, error) {
 	if envPath := strings.TrimSpace(os.Getenv(envVarStatePath)); envPath != "" {
 		cfg.State.Path = envPath
 	}
-	if rawTags, ok := os.LookupEnv(envVarTSNetTags); ok {
+	if rawTags, ok := os.LookupEnv(envVarTSNetTags); ok && strings.TrimSpace(rawTags) != "" {
 		tags, err := parseStringListEnv(envVarTSNetTags, rawTags)
 		if err != nil {
 			return cfg, err
@@ -219,6 +219,7 @@ func Load(path string) (Config, error) {
 	applyStringEnvOverride(envVarTSNetClientID, &cfg.TSNet.ClientID)
 	applyStringEnvOverride(envVarTSNetIDToken, &cfg.TSNet.IDToken)
 	applyStringEnvOverride(envVarTSNetAudience, &cfg.TSNet.Audience)
+	applySensibleDefaults(&cfg)
 	return cfg, Validate(cfg)
 }
 
@@ -254,33 +255,41 @@ func applyStructuredEnvOverrides(cfg *Config) error {
 }
 
 func suppressStructuredEnvForViper(v *viper.Viper) {
-	if _, ok := os.LookupEnv(envVarDetectors); ok {
+	if _, ok := lookupNonEmptyEnv(envVarDetectors); ok {
 		v.Set("detectors", map[string]Detector{})
 	}
-	if _, ok := os.LookupEnv(envVarDetectorOrder); ok {
+	if _, ok := lookupNonEmptyEnv(envVarDetectorOrder); ok {
 		v.Set("detector_order", []string{})
 	}
-	if _, ok := os.LookupEnv(envVarNotifierSinks); ok {
+	if _, ok := lookupNonEmptyEnv(envVarNotifierSinks); ok {
 		v.Set("notifier.sinks", []SinkConfig{})
 	}
-	if _, ok := os.LookupEnv(envVarNotifierRoutes); ok {
+	if _, ok := lookupNonEmptyEnv(envVarNotifierRoutes); ok {
 		v.Set("notifier.routes", []RouteConfig{})
 	}
 }
 
 func decodeEnvJSON(key string, target any) (bool, error) {
-	raw, ok := os.LookupEnv(key)
+	raw, ok := lookupNonEmptyEnv(key)
 	if !ok {
 		return false, nil
-	}
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return true, fmt.Errorf("parse %s: value is empty; expected JSON", key)
 	}
 	if err := json.Unmarshal([]byte(raw), target); err != nil {
 		return true, fmt.Errorf("parse %s: %w", key, err)
 	}
 	return true, nil
+}
+
+func lookupNonEmptyEnv(key string) (string, bool) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return "", false
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	return raw, true
 }
 
 func parseStringListEnv(key, raw string) ([]string, error) {
@@ -314,8 +323,56 @@ func parseStringListEnv(key, raw string) ([]string, error) {
 }
 
 func applyStringEnvOverride(key string, target *string) {
-	if raw, ok := os.LookupEnv(key); ok {
-		*target = strings.TrimSpace(raw)
+	if raw, ok := lookupNonEmptyEnv(key); ok {
+		*target = raw
+	}
+}
+
+func applySensibleDefaults(cfg *Config) {
+	def := Default()
+
+	cfg.Source.Mode = strings.TrimSpace(cfg.Source.Mode)
+	if cfg.Source.Mode == "" {
+		cfg.Source.Mode = def.Source.Mode
+	}
+
+	cfg.State.Path = strings.TrimSpace(cfg.State.Path)
+	if cfg.State.Path == "" {
+		cfg.State.Path = def.State.Path
+	}
+
+	cfg.Output.LogFormat = strings.TrimSpace(cfg.Output.LogFormat)
+	if cfg.Output.LogFormat == "" {
+		cfg.Output.LogFormat = def.Output.LogFormat
+	}
+	cfg.Output.LogLevel = strings.TrimSpace(cfg.Output.LogLevel)
+	if cfg.Output.LogLevel == "" {
+		cfg.Output.LogLevel = def.Output.LogLevel
+	}
+
+	cfg.TSNet.Hostname = strings.TrimSpace(cfg.TSNet.Hostname)
+	if cfg.TSNet.Hostname == "" {
+		cfg.TSNet.Hostname = def.TSNet.Hostname
+	}
+	cfg.TSNet.StateDir = strings.TrimSpace(cfg.TSNet.StateDir)
+	if cfg.TSNet.StateDir == "" {
+		cfg.TSNet.StateDir = def.TSNet.StateDir
+	}
+	cfg.TSNet.LoginMode = strings.TrimSpace(cfg.TSNet.LoginMode)
+	if cfg.TSNet.LoginMode == "" {
+		cfg.TSNet.LoginMode = def.TSNet.LoginMode
+	}
+	if cfg.TSNet.LoginTimeout <= 0 {
+		cfg.TSNet.LoginTimeout = def.TSNet.LoginTimeout
+	}
+
+	cfg.TSNet.AuthKey = strings.TrimSpace(cfg.TSNet.AuthKey)
+	cfg.TSNet.ClientSecret = strings.TrimSpace(cfg.TSNet.ClientSecret)
+	cfg.TSNet.ClientID = strings.TrimSpace(cfg.TSNet.ClientID)
+	cfg.TSNet.IDToken = strings.TrimSpace(cfg.TSNet.IDToken)
+	cfg.TSNet.Audience = strings.TrimSpace(cfg.TSNet.Audience)
+	for i := range cfg.TSNet.AdvertiseTags {
+		cfg.TSNet.AdvertiseTags[i] = strings.TrimSpace(cfg.TSNet.AdvertiseTags[i])
 	}
 }
 

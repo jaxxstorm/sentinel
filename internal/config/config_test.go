@@ -302,17 +302,36 @@ func TestLoadFailsOnMalformedStructuredEnvValue(t *testing.T) {
 	}
 }
 
-func TestLoadFailsOnEmptyStructuredEnvValue(t *testing.T) {
+func TestLoadIgnoresEmptyStructuredEnvValue(t *testing.T) {
 	t.Setenv(envVarNotifierRoutes, "   ")
-	_, err := Load("")
-	if err == nil {
-		t.Fatal("expected parse error for empty structured env value")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("expected empty structured env value to be ignored, got %v", err)
 	}
-	if !strings.Contains(err.Error(), envVarNotifierRoutes) {
-		t.Fatalf("expected error to include env key, got %v", err)
+	if len(cfg.Notifier.Routes) == 0 {
+		t.Fatal("expected default notifier routes when structured env is empty")
 	}
-	if !strings.Contains(err.Error(), "empty") {
-		t.Fatalf("expected error to mention empty value, got %v", err)
+}
+
+func TestLoadIgnoresEmptyStructuredEnvAndPreservesFileConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"notifier:\n" +
+		"  routes:\n" +
+		"    - event_types: [\"peer.online\"]\n" +
+		"      sinks: [\"stdout-debug\"]\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envVarNotifierRoutes, " ")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected empty structured env to not clear file config, got %v", err)
+	}
+	if len(cfg.Notifier.Routes) != 1 || len(cfg.Notifier.Routes[0].EventTypes) != 1 || cfg.Notifier.Routes[0].EventTypes[0] != "peer.online" {
+		t.Fatalf("expected file routes to be preserved, got %+v", cfg.Notifier.Routes)
 	}
 }
 
@@ -371,6 +390,27 @@ func TestLoadSupportsTSNetAdvertiseTagsEnvCSV(t *testing.T) {
 	}
 	if len(cfg.TSNet.AdvertiseTags) != 2 {
 		t.Fatalf("expected 2 advertise tags, got %d", len(cfg.TSNet.AdvertiseTags))
+	}
+}
+
+func TestLoadIgnoresEmptyTSNetAdvertiseTagsEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"tsnet:\n" +
+		"  advertise_tags:\n" +
+		"    - tag:from-file\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envVarTSNetTags, " ")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected empty tsnet tags env to be ignored, got %v", err)
+	}
+	if len(cfg.TSNet.AdvertiseTags) != 1 || cfg.TSNet.AdvertiseTags[0] != "tag:from-file" {
+		t.Fatalf("expected file advertise tags to be preserved, got %v", cfg.TSNet.AdvertiseTags)
 	}
 }
 
@@ -450,5 +490,42 @@ func TestLoadSupportsOAuthCredentialsFromEnv(t *testing.T) {
 	}
 	if cfg.TSNet.ClientID != "env-client" {
 		t.Fatalf("expected client id from env, got %q", cfg.TSNet.ClientID)
+	}
+}
+
+func TestLoadDefaultsOutputLogFormatWhenEnvValueIsEmpty(t *testing.T) {
+	t.Setenv("SENTINEL_OUTPUT_LOG_FORMAT", "   ")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("expected empty output log format env to be ignored, got %v", err)
+	}
+	if cfg.Output.LogFormat != "pretty" {
+		t.Fatalf("expected default log format pretty, got %q", cfg.Output.LogFormat)
+	}
+}
+
+func TestLoadIgnoresEmptyOAuthCredentialEnvOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"tsnet:\n" +
+		"  client_secret: file-secret\n" +
+		"  client_id: file-client\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envVarTSNetClientSecret, " ")
+	t.Setenv(envVarTSNetClientID, " ")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected empty oauth env overrides to be ignored, got %v", err)
+	}
+	if cfg.TSNet.ClientSecret != "file-secret" {
+		t.Fatalf("expected file client_secret to be preserved, got %q", cfg.TSNet.ClientSecret)
+	}
+	if cfg.TSNet.ClientID != "file-client" {
+		t.Fatalf("expected file client_id to be preserved, got %q", cfg.TSNet.ClientID)
 	}
 }

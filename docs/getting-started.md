@@ -49,3 +49,19 @@ docsify serve docs
 ```
 
 Then open `http://localhost:3000`.
+
+## Local Compose Quick Start
+
+For local container workflows with source builds:
+
+```bash
+cp .env.example .env
+```
+
+Set `SENTINEL_TAILSCALE_AUTH_KEY` in `.env`, then run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+```
+
+For Railway template import guidance, see [Docker Compose and Railway](docker-compose.md).

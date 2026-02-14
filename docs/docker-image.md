@@ -2,19 +2,20 @@
 
 This page documents environment variables used when running Sentinel from the published container image.
 
+For end-to-end Compose usage (including Railway template import and local source-build overlay),
+see [Docker Compose and Railway](docker-compose.md).
+
 ## Image Defaults
 
 - Image entrypoint: `sentinel`
 - Default command: `run`
-- Default config path in image: `/sentinel/config.yaml`
-- Default environment in image:
-  - `SENTINEL_CONFIG_PATH=/sentinel/config.yaml`
+- No default config file path is forced; Sentinel can run in env-only mode.
 
 ## Runtime Environment Variables
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `SENTINEL_CONFIG_PATH` | No | Config file path used by Sentinel. In the image this defaults to `/sentinel/config.yaml`. |
+| `SENTINEL_CONFIG_PATH` | No | Optional config file path used by Sentinel when running with a mounted config file. |
 | `SENTINEL_TAILSCALE_AUTH_KEY` | Depends on login mode | Auth key for Tailscale onboarding (`tsnet.login_mode=auth_key` requires this unless `tsnet.auth_key` is set in config). |
 | `SENTINEL_TSNET_AUTH_KEY` | No | Maps to `tsnet.auth_key` in config. Used as a lower-priority auth key source than `SENTINEL_TAILSCALE_AUTH_KEY`. |
 | `SENTINEL_TSNET_ADVERTISE_TAGS` | No | Tags requested during enrollment. Accepts JSON array or comma-separated tags (for example `tag:sentinel,tag:prod`). |

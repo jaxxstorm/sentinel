@@ -29,8 +29,6 @@ WORKDIR /sentinel
 COPY --from=builder /sentinel/sentinel .
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-ENV SENTINEL_CONFIG_PATH=/sentinel/config.yaml
-
 ENV PATH=$PATH:/sentinel
 
 ENTRYPOINT ["sentinel"]

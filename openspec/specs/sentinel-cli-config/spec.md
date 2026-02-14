@@ -34,7 +34,7 @@ The `run` command SHALL support `--dry-run` and `--once` execution modes, and SH
 - **THEN** Sentinel cancels runtime context, performs graceful shutdown handling, and exits without an unstructured `signal: interrupt` tail error line
 
 ### Requirement: Config loading supports YAML, JSON, and environment overrides
-Sentinel SHALL load configuration from YAML or JSON files, MUST apply environment variable overrides using the `SENTINEL_` prefix, SHALL support environment-only configuration for full runtime operation (including structured fields), SHALL validate expanded event type values including wildcard `*` for route event matching, SHALL validate sink type-specific configuration for supported sink types including `discord`, and operator documentation SHALL include working configuration examples that reflect this behavior.
+Sentinel SHALL load configuration from YAML or JSON files, MUST apply environment variable overrides using the `SENTINEL_` prefix, SHALL support environment-only configuration for full runtime operation (including structured fields), SHALL validate expanded event type values including wildcard `*` for route event matching, SHALL validate sink type-specific configuration for supported sink types including `discord`, SHALL validate Tailscale onboarding fields including advertise tags and OAuth credential combinations, and operator documentation SHALL include working configuration examples that reflect this behavior.
 
 #### Scenario: Environment overrides file value
 - **WHEN** `poll_interval` is set in config file and `SENTINEL_POLL_INTERVAL` is also set
@@ -63,6 +63,18 @@ Sentinel SHALL load configuration from YAML or JSON files, MUST apply environmen
 #### Scenario: Invalid structured environment value is rejected
 - **WHEN** an operator sets malformed structured config content in a supported `SENTINEL_` env key
 - **THEN** Sentinel fails config loading with a parse/validation error that identifies the offending env key
+
+#### Scenario: Advertise tags are accepted from config and env
+- **WHEN** an operator configures `tsnet.advertise_tags` in file or with the mapped `SENTINEL_` environment key
+- **THEN** Sentinel validates and loads those tags into runtime tsnet configuration
+
+#### Scenario: Invalid advertise tag format is rejected
+- **WHEN** an operator configures an advertise tag that does not match required Tailscale tag format
+- **THEN** Sentinel fails validation with a tag-specific configuration error
+
+#### Scenario: OAuth client secret credential inputs are validated
+- **WHEN** an operator configures OAuth credential fields for tsnet onboarding
+- **THEN** Sentinel accepts complete valid combinations and rejects incomplete combinations with actionable validation errors
 
 #### Scenario: Documentation includes env interpolation examples
 - **WHEN** an operator reads the configuration documentation

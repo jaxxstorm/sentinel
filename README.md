@@ -34,6 +34,13 @@ REQUESTBIN_WEBHOOK_URL="https://your-endpoint" \
 go run ./cmd/sentinel run --config ./config.example.yaml
 ```
 
+Compose-based local run:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+```
+
 ## Configuration
 
 - Example config: [`config.example.yaml`](config.example.yaml)
@@ -57,6 +64,7 @@ Operator docs live under [`docs/`](docs/README.md) and are structured for Docsif
 
 - [Getting Started](docs/getting-started.md)
 - [Configuration Reference](docs/configuration.md)
+- [Docker Compose and Railway](docs/docker-compose.md)
 - [Sinks and Routing](docs/sinks-and-routing.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Command Reference](docs/commands.md)

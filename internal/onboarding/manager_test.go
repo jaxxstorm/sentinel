@@ -48,6 +48,10 @@ func TestResolveAuthKeyPrecedence(t *testing.T) {
 	if value != "from-env" || source != "env" {
 		t.Fatalf("unexpected env precedence: value=%q source=%q", value, source)
 	}
+	value, source = ResolveAuthKey(" ", " ", "from-config")
+	if value != "from-config" || source != "config" {
+		t.Fatalf("expected empty values to be ignored, got value=%q source=%q", value, source)
+	}
 }
 
 func TestResolveOAuthCredentialsPrecedence(t *testing.T) {

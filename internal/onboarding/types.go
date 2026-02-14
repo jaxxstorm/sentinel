@@ -131,6 +131,9 @@ func NormalizeMode(mode string) string {
 }
 
 func ResolveAuthKey(flagValue, envValue, configValue string) (value, source string) {
+	flagValue = strings.TrimSpace(flagValue)
+	envValue = strings.TrimSpace(envValue)
+	configValue = strings.TrimSpace(configValue)
 	if flagValue != "" {
 		return flagValue, "flag"
 	}
