@@ -11,10 +11,17 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ghcr:
     runs-on: ubuntu-latest
     steps:
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -63,9 +70,24 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=publish-image
+            type=gha,scope=release-validation-dry-run
+          cache-to: type=gha,mode=max,scope=publish-image
           build-args: |
             TAG_NAME=${{ github.ref_name }}
             COMMIT_HASH=${{ github.sha }}
             BUILD_TIMESTAMP=${{ steps.timestamp.outputs.value }}
+
+      - name: Summarize duration
+        if: always()
+        run: |
+          end_epoch=$(date +%s)
+          elapsed=$((end_epoch - JOB_START_EPOCH))
+          target=540
+          echo "### publish-image duration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$target" ]; then
+            echo "::warning::publish-image exceeded target (${elapsed}s > ${target}s)"
+          fi

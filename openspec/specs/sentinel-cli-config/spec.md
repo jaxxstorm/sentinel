@@ -5,11 +5,15 @@ TBD - created by archiving change implement-basic-functionality. Update Purpose 
 
 ## Requirements
 ### Requirement: Sentinel provides a standard command surface
-Sentinel SHALL expose the commands `run`, `status`, `diff`, `dump-netmap`, `test-notify`, and `validate-config`.
+Sentinel SHALL expose the commands `run`, `status`, `diff`, `dump-netmap`, `test-notify`, `validate-config`, and `version`.
 
 #### Scenario: CLI shows expected commands
 - **WHEN** an operator runs `sentinel --help`
 - **THEN** the command list includes all required Sentinel commands
+
+#### Scenario: Version command is available as a first-class command
+- **WHEN** an operator runs `sentinel version --help`
+- **THEN** Sentinel returns command help for `version` without requiring runtime config or tsnet startup
 
 ### Requirement: All commands accept shared config and logging flags
 Every Sentinel command SHALL accept `--config`, and global flags SHALL include `--log-format`, `--log-level`, and `--no-color`.
@@ -63,3 +67,14 @@ Sentinel SHALL load configuration from YAML or JSON files, MUST apply environmen
 #### Scenario: Documentation includes env interpolation examples
 - **WHEN** an operator reads the configuration documentation
 - **THEN** the docs include explicit examples for `${VAR_NAME}` interpolation in sink URLs and `SENTINEL_` prefixed overrides, including environment-only docker usage
+
+### Requirement: Version command SHALL report standardized build metadata
+The `sentinel version` command SHALL print version, commit, and build timestamp fields derived from the runtime version metadata model.
+
+#### Scenario: Version command reports release metadata
+- **WHEN** an operator runs `sentinel version` on a release binary
+- **THEN** output includes non-empty version, commit hash, and build timestamp values consistent with build metadata
+
+#### Scenario: Version command reports fallback metadata for local builds
+- **WHEN** an operator runs `sentinel version` on a local untagged build
+- **THEN** output includes documented fallback values rather than missing fields

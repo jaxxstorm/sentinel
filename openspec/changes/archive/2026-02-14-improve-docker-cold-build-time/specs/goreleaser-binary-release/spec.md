@@ -1,9 +1,5 @@
-# goreleaser-binary-release Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-release-artifacts-goreleaser-ghcr. Update Purpose after archive.
-
-## Requirements
 ### Requirement: Sentinel SHALL produce release binaries via GoReleaser in GitHub Actions
 Sentinel SHALL provide GoReleaser configuration and a GitHub Actions workflow that builds release binaries for supported platforms from tagged releases, SHALL inject version metadata required by Sentinel runtime version reporting, and SHALL apply CI caching/parallelization strategies that reduce cross-platform build duration without changing release artifacts.
 
@@ -18,17 +14,3 @@ Sentinel SHALL provide GoReleaser configuration and a GitHub Actions workflow th
 #### Scenario: GoReleaser workflow uses cache-aware setup
 - **WHEN** release or validation workflows execute GoReleaser builds
 - **THEN** Go dependency/build caches are restored and saved to reduce repeated cross-platform build cost
-
-### Requirement: GoReleaser binary release SHALL exclude container image publishing
-The GoReleaser configuration SHALL NOT build or publish Docker/OCI images.
-
-#### Scenario: GoReleaser run emits no image artifacts
-- **WHEN** the release workflow executes GoReleaser
-- **THEN** produced artifacts include binaries/archives/checksums and do not include container image publish steps
-
-### Requirement: Release binaries SHALL be discoverable through GitHub Releases
-Binary artifacts produced by GoReleaser SHALL be attached to the corresponding GitHub Release for each version tag.
-
-#### Scenario: Release assets are attached to tag release
-- **WHEN** GoReleaser completes successfully for a tag
-- **THEN** the GitHub Release for that tag contains the generated binary artifacts and checksums

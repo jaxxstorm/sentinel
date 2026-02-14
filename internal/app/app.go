@@ -72,7 +72,11 @@ func (r *Runner) Run(ctx context.Context, once bool, dryRun bool) error {
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
 			}
-			r.Log.Error("poll cycle failed", zap.Error(err))
+			if isRetryableEnrollmentError(err) {
+				r.Log.Warn("poll cycle failed", zap.Error(err))
+			} else {
+				r.Log.Error("poll cycle failed", zap.Error(err))
+			}
 			if once {
 				return err
 			}
@@ -114,7 +118,11 @@ func (r *Runner) RunOnce(ctx context.Context, dryRun bool) (CycleResult, error) 
 		previousEnrollmentStatus := r.Enrollment.LastStatus()
 		enrollmentStatus, err := r.Enrollment.EnsureEnrolled(ctx)
 		if err != nil {
-			r.Log.Error("tailscale enrollment failed", enrollmentLogFields(enrollmentStatus)...)
+			if isRetryableEnrollmentError(err) {
+				r.Log.Warn("tailscale enrollment failed", enrollmentLogFields(enrollmentStatus)...)
+			} else {
+				r.Log.Error("tailscale enrollment failed", enrollmentLogFields(enrollmentStatus)...)
+			}
 			return res, fmt.Errorf("enrollment: %w", err)
 		}
 		if enrollmentStatusChanged(previousEnrollmentStatus, enrollmentStatus) {
@@ -272,4 +280,12 @@ func enrollmentLogFields(st onboarding.Status) []zap.Field {
 		fields = append(fields, zap.String("login_url", st.LoginURL))
 	}
 	return fields
+}
+
+func isRetryableEnrollmentError(err error) bool {
+	var enrollmentErr *onboarding.EnrollmentError
+	if !errors.As(err, &enrollmentErr) {
+		return false
+	}
+	return enrollmentErr.Class == onboarding.ErrorClassRetryable
 }

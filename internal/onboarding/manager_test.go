@@ -112,6 +112,101 @@ func TestEnsureEnrolledAuthKeySuccess(t *testing.T) {
 	}
 }
 
+func TestEnsureEnrolledSetsAuthKeyBeforeProbe(t *testing.T) {
+	const key = "tskey-auth-k123"
+	joined := false
+	checks := 0
+	var provider *fakeProvider
+	provider = &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			checks++
+			if checks == 1 && provider.authKey != key {
+				t.Fatalf("expected auth key to be set before first status check, got %q", provider.authKey)
+			}
+			if joined {
+				return ProviderStatus{Joined: true, Hostname: "joined-node"}, nil
+			}
+			return ProviderStatus{Joined: false}, nil
+		},
+		start: func(context.Context) error {
+			joined = true
+			return nil
+		},
+	}
+
+	mgr := NewManager(Config{Mode: "auth_key", AuthKey: key}, provider, nil)
+	if _, err := mgr.EnsureEnrolled(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if checks < 2 {
+		t.Fatalf("expected at least 2 status checks, got %d", checks)
+	}
+}
+
+func TestEnsureEnrolledAuthKeyWaitsForJoin(t *testing.T) {
+	const key = "tskey-auth-k123"
+	started := false
+	postStartChecks := 0
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			if !started {
+				return ProviderStatus{Joined: false}, nil
+			}
+			postStartChecks++
+			if postStartChecks < 3 {
+				return ProviderStatus{Joined: false}, nil
+			}
+			return ProviderStatus{Joined: true, Hostname: "joined-node"}, nil
+		},
+		start: func(context.Context) error {
+			started = true
+			return nil
+		},
+	}
+
+	mgr := NewManager(Config{Mode: "auth_key", AuthKey: key}, provider, nil)
+	typed := mgr.(*manager)
+	typed.authKeySettleTimeout = 25 * time.Millisecond
+	typed.statusPollInterval = 1 * time.Millisecond
+
+	st, err := mgr.EnsureEnrolled(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != StateJoined {
+		t.Fatalf("expected joined state, got %s", st.State)
+	}
+	if postStartChecks < 3 {
+		t.Fatalf("expected repeated post-start checks, got %d", postStartChecks)
+	}
+}
+
+func TestEnsureEnrolledAuthKeyPendingClassifiedRetryable(t *testing.T) {
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			return ProviderStatus{Joined: false, NeedsLogin: false}, nil
+		},
+		start: func(context.Context) error {
+			return nil
+		},
+	}
+	mgr := NewManager(Config{Mode: "auth_key", AuthKey: "tskey-auth-k123"}, provider, nil)
+	typed := mgr.(*manager)
+	typed.authKeySettleTimeout = 2 * time.Millisecond
+	typed.statusPollInterval = 1 * time.Millisecond
+
+	st, err := mgr.EnsureEnrolled(context.Background())
+	if err == nil {
+		t.Fatal("expected pending error")
+	}
+	if st.ErrorCode != "auth_key_pending" {
+		t.Fatalf("expected auth_key_pending, got %s", st.ErrorCode)
+	}
+	if st.ErrorClass != ErrorClassRetryable {
+		t.Fatalf("expected retryable class, got %s", st.ErrorClass)
+	}
+}
+
 func TestEnsureEnrolledInteractiveTimeout(t *testing.T) {
 	provider := &fakeProvider{
 		checkStatus: func(context.Context) (ProviderStatus, error) {

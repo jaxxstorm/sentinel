@@ -6,7 +6,7 @@ import (
 
 func TestRootCommandIncludesRequiredSubcommands(t *testing.T) {
 	cmd := NewRootCommand()
-	expected := []string{"run", "status", "diff", "dump-netmap", "test-notify", "validate-config"}
+	expected := []string{"run", "status", "diff", "dump-netmap", "test-notify", "validate-config", "version"}
 	for _, name := range expected {
 		found := false
 		for _, c := range cmd.Commands() {

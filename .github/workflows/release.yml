@@ -9,10 +9,17 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -22,6 +29,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Restore Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('go.sum', '.goreleaser.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -31,3 +48,16 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize duration
+        if: always()
+        run: |
+          end_epoch=$(date +%s)
+          elapsed=$((end_epoch - JOB_START_EPOCH))
+          target=600
+          echo "### goreleaser release duration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$target" ]; then
+            echo "::warning::release job exceeded target (${elapsed}s > ${target}s)"
+          fi

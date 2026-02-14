@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jaxxstorm/sentinel/internal/constants"
+	"github.com/jaxxstorm/sentinel/internal/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -25,7 +25,7 @@ func newRunCmd(opts *GlobalOptions) *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			deps.runner.Log.Info("running sentinel", zap.String("version", constants.TagName))
+			deps.runner.Log.Info("running sentinel", zap.String("version", version.Current().Version))
 			return executeRun(ctx, deps, once, dryRun)
 		},
 	}

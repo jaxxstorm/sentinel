@@ -9,10 +9,50 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  workflow-lint:
     runs-on: ubuntu-latest
+    outputs:
+      duration_seconds: ${{ steps.duration.outputs.elapsed }}
+      target_seconds: "90"
     steps:
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate workflow syntax
+        uses: rhysd/actionlint@v1
+
+      - name: Summarize duration
+        id: duration
+        if: always()
+        run: |
+          end_epoch=$(date +%s)
+          elapsed=$((end_epoch - JOB_START_EPOCH))
+          target=90
+          echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
+          echo "### workflow-lint duration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$target" ]; then
+            echo "::warning::workflow-lint exceeded target (${elapsed}s > ${target}s)"
+          fi
+
+  goreleaser-validate:
+    runs-on: ubuntu-latest
+    outputs:
+      duration_seconds: ${{ steps.duration.outputs.elapsed }}
+      target_seconds: "420"
+    steps:
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -22,9 +62,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
 
-      - name: Validate workflow syntax
-        uses: rhysd/actionlint@v1
+      - name: Restore Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('go.sum', '.goreleaser.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
 
       - name: Validate GoReleaser config
         uses: goreleaser/goreleaser-action@v6
@@ -42,12 +89,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Summarize duration
+        id: duration
+        if: always()
+        run: |
+          end_epoch=$(date +%s)
+          elapsed=$((end_epoch - JOB_START_EPOCH))
+          target=420
+          echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
+          echo "### goreleaser-validate duration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$target" ]; then
+            echo "::warning::goreleaser-validate exceeded target (${elapsed}s > ${target}s)"
+          fi
+
+  docker-dry-run:
+    runs-on: ubuntu-latest
+    outputs:
+      duration_seconds: ${{ steps.duration.outputs.elapsed }}
+      target_seconds: "240"
+    steps:
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Build timestamp
         id: timestamp
         run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,7 +132,65 @@ jobs:
           load: false
           platforms: linux/amd64
           tags: sentinel:dry-run
+          cache-from: type=gha,scope=release-validation-dry-run
+          cache-to: type=gha,mode=max,scope=release-validation-dry-run
           build-args: |
             TAG_NAME=v0.0.0-dryrun
             COMMIT_HASH=${{ github.sha }}
             BUILD_TIMESTAMP=${{ steps.timestamp.outputs.value }}
+
+      - name: Summarize duration
+        id: duration
+        if: always()
+        run: |
+          end_epoch=$(date +%s)
+          elapsed=$((end_epoch - JOB_START_EPOCH))
+          target=240
+          echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
+          echo "### docker-dry-run duration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$target" ]; then
+            echo "::warning::docker-dry-run exceeded target (${elapsed}s > ${target}s)"
+          fi
+
+  duration-summary:
+    if: always()
+    needs:
+      - workflow-lint
+      - goreleaser-validate
+      - docker-dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize workflow durations
+        env:
+          WORKFLOW_LINT_DURATION: ${{ needs.workflow-lint.outputs.duration_seconds || '0' }}
+          WORKFLOW_LINT_TARGET: ${{ needs.workflow-lint.outputs.target_seconds }}
+          GORELEASER_DURATION: ${{ needs.goreleaser-validate.outputs.duration_seconds || '0' }}
+          GORELEASER_TARGET: ${{ needs.goreleaser-validate.outputs.target_seconds }}
+          DOCKER_DURATION: ${{ needs.docker-dry-run.outputs.duration_seconds || '0' }}
+          DOCKER_TARGET: ${{ needs.docker-dry-run.outputs.target_seconds }}
+        run: |
+          set -eu
+          max_duration=0
+          for value in "$WORKFLOW_LINT_DURATION" "$GORELEASER_DURATION" "$DOCKER_DURATION"; do
+            if [ "$value" -gt "$max_duration" ]; then
+              max_duration="$value"
+            fi
+          done
+          critical_path_target=420
+          {
+            echo "## Release Validation Duration Summary"
+            echo ""
+            echo "| Job | Duration (s) | Target (s) |"
+            echo "| --- | ---: | ---: |"
+            echo "| workflow-lint | ${WORKFLOW_LINT_DURATION} | ${WORKFLOW_LINT_TARGET} |"
+            echo "| goreleaser-validate | ${GORELEASER_DURATION} | ${GORELEASER_TARGET} |"
+            echo "| docker-dry-run | ${DOCKER_DURATION} | ${DOCKER_TARGET} |"
+            echo ""
+            echo "- Estimated critical path: ${max_duration}s"
+            echo "- Critical path target: <= ${critical_path_target}s"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$max_duration" -gt "$critical_path_target" ]; then
+            echo "::warning::release-validation critical path exceeded target (${max_duration}s > ${critical_path_target}s)"
+          fi

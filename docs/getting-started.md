@@ -9,6 +9,10 @@
 ## Quick Start
 
 ```bash
+go run ./cmd/sentinel version
+```
+
+```bash
 go run ./cmd/sentinel validate-config --config ./config.example.yaml
 ```
 

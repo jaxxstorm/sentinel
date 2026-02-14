@@ -2,8 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"io"
 
-	"github.com/jaxxstorm/sentinel/internal/constants"
+	"github.com/jaxxstorm/sentinel/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -11,11 +12,16 @@ func newVersionCmd(_ *GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Show build and version information",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Printf("Version: %s\n", constants.TagName)
-			fmt.Printf("Build Timestamp: %s\n", constants.BuildTimestamp)
-			fmt.Printf("Commit Hash: %s\n", constants.CommitHash)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			info := version.Current()
+			writeVersion(cmd.OutOrStdout(), info)
 			return nil
 		},
 	}
+}
+
+func writeVersion(w io.Writer, info version.Metadata) {
+	fmt.Fprintf(w, "Version: %s\n", info.Version)
+	fmt.Fprintf(w, "Build Timestamp: %s\n", info.BuildTimestamp)
+	fmt.Fprintf(w, "Commit Hash: %s\n", info.CommitHash)
 }

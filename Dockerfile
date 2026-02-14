@@ -2,6 +2,8 @@ FROM golang:1.26.0-alpine3.23 AS builder
 
 WORKDIR /sentinel
 
+RUN apk add --no-cache ca-certificates
+
 COPY go.mod go.sum ./
 
 RUN go mod download
@@ -16,15 +18,16 @@ ARG CGO_ENABLED=0
 
 # -s -w can be added to strip debug symbols and reduce binary size
 RUN CGO_ENABLED=${CGO_ENABLED} go build -ldflags "\
-    -X github.com/jaxxstorm/sentinel/internal/constants.TagName=${TAG_NAME} \
-    -X github.com/jaxxstorm/sentinel/internal/constants.BuildTimestamp=${BUILD_TIMESTAMP} \
-    -X github.com/jaxxstorm/sentinel/internal/constants.CommitHash=${COMMIT_HASH}" ./cmd/sentinel
+    -X github.com/jaxxstorm/sentinel/internal/version.TagName=${TAG_NAME} \
+    -X github.com/jaxxstorm/sentinel/internal/version.BuildTimestamp=${BUILD_TIMESTAMP} \
+    -X github.com/jaxxstorm/sentinel/internal/version.CommitHash=${COMMIT_HASH}" ./cmd/sentinel
 
 FROM scratch
 
 WORKDIR /sentinel
 
 COPY --from=builder /sentinel/sentinel .
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 ENV SENTINEL_CONFIG_PATH=/sentinel/config.yaml
 

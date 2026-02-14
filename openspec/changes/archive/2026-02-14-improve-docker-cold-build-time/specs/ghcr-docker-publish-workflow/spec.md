@@ -1,9 +1,5 @@
-# ghcr-docker-publish-workflow Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-release-artifacts-goreleaser-ghcr. Update Purpose after archive.
-
-## Requirements
 ### Requirement: Sentinel SHALL publish Docker images to GHCR from GitHub Actions
 Sentinel SHALL provide a dedicated GitHub Actions workflow that builds the project Docker image and pushes it to GitHub Container Registry, and SHALL optimize multi-platform build execution to reduce total publish duration while preserving tag and label outputs.
 

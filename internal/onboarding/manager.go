@@ -12,10 +12,12 @@ import (
 )
 
 type manager struct {
-	cfg      Config
-	provider Provider
-	logger   *zap.Logger
-	status   Status
+	cfg                  Config
+	provider             Provider
+	logger               *zap.Logger
+	status               Status
+	authKeySettleTimeout time.Duration
+	statusPollInterval   time.Duration
 }
 
 func NewManager(cfg Config, provider Provider, logger *zap.Logger) EnrollmentManager {
@@ -26,10 +28,12 @@ func NewManager(cfg Config, provider Provider, logger *zap.Logger) EnrollmentMan
 		logger = zap.NewNop()
 	}
 	return &manager{
-		cfg:      cfg,
-		provider: provider,
-		logger:   logger,
-		status:   Status{State: StateNotJoined, Mode: NormalizeMode(cfg.Mode), ErrorClass: ErrorClassNone},
+		cfg:                  cfg,
+		provider:             provider,
+		logger:               logger,
+		status:               Status{State: StateNotJoined, Mode: NormalizeMode(cfg.Mode), ErrorClass: ErrorClassNone},
+		authKeySettleTimeout: 10 * time.Second,
+		statusPollInterval:   500 * time.Millisecond,
 	}
 }
 
@@ -50,6 +54,7 @@ func (m *manager) Probe(ctx context.Context) (Status, error) {
 		m.setStatus(st)
 		return st, &EnrollmentError{Code: st.ErrorCode, Class: st.ErrorClass, Message: st.Message}
 	}
+	m.primeProviderAuthKey()
 
 	ps, err := m.provider.CheckStatus(ctx)
 	if err != nil {
@@ -67,6 +72,18 @@ func (m *manager) Probe(ctx context.Context) (Status, error) {
 	st := statusFromProvider(ps, NormalizeMode(m.cfg.Mode))
 	m.setStatus(st)
 	return st, nil
+}
+
+func (m *manager) primeProviderAuthKey() {
+	mode := NormalizeMode(m.cfg.Mode)
+	if mode == "" || mode == "interactive" {
+		return
+	}
+	authKey := strings.TrimSpace(m.cfg.AuthKey)
+	if authKey == "" {
+		return
+	}
+	m.provider.SetAuthKey(authKey)
 }
 
 func (m *manager) EnsureEnrolled(ctx context.Context) (Status, error) {
@@ -109,7 +126,7 @@ func (m *manager) tryAuthKey(ctx context.Context, allowFallback bool) (Status, e
 		}
 		return m.fail("auth_key_start_failed", classifyError(err), "tailscale auth key enrollment failed", "verify key validity and tailnet policy", err)
 	}
-	ps, err := m.provider.CheckStatus(ctx)
+	ps, err := m.waitForAuthKeyEnrollment(ctx)
 	if err != nil {
 		if allowFallback {
 			return m.tryInteractive(ctx)
@@ -121,10 +138,45 @@ func (m *manager) tryAuthKey(ctx context.Context, allowFallback bool) (Status, e
 		m.setStatus(st)
 		return st, nil
 	}
+	if !ps.NeedsLogin {
+		return m.fail("auth_key_pending", ErrorClassRetryable, "tailscale auth key enrollment is still in progress", "retry startup and verify tailscale connectivity", nil)
+	}
 	if allowFallback {
 		return m.tryInteractive(ctx)
 	}
 	return m.fail("auth_key_rejected", ErrorClassNonRetryable, "auth key enrollment did not join the tailnet", "verify key validity/expiry and tailnet ACL policy", nil)
+}
+
+func (m *manager) waitForAuthKeyEnrollment(ctx context.Context) (ProviderStatus, error) {
+	interval := m.statusPollInterval
+	if interval <= 0 {
+		interval = 500 * time.Millisecond
+	}
+	timeout := m.authKeySettleTimeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var last ProviderStatus
+	for {
+		ps, err := m.provider.CheckStatus(ctx)
+		if err != nil {
+			return last, err
+		}
+		last = ps
+		if ps.Joined || time.Now().After(deadline) {
+			return ps, nil
+		}
+		select {
+		case <-ctx.Done():
+			return last, ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func (m *manager) tryInteractive(ctx context.Context) (Status, error) {
@@ -199,6 +251,10 @@ func (m *manager) setStatus(st Status) {
 		fields = append(fields, zap.String("login_url", st.LoginURL))
 	}
 	if st.State == StateAuthFailed {
+		if st.ErrorClass == ErrorClassRetryable {
+			m.logger.Warn("tailscale onboarding status", fields...)
+			return
+		}
 		m.logger.Error("tailscale onboarding status", fields...)
 		return
 	}
