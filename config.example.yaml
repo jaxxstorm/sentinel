@@ -6,6 +6,9 @@
 #   export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
 #   export SENTINEL_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 #   export SENTINEL_TAILSCALE_AUTH_KEY="tskey-..."
+#   export SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]'
+#   export SENTINEL_TSNET_CLIENT_SECRET="oauth-client-secret"
+#   export SENTINEL_TSNET_CLIENT_ID="oauth-client-id"
 
 poll_interval: 10s
 poll_jitter: 1s
@@ -86,9 +89,18 @@ output:
 tsnet:
   hostname: sentinel
   state_dir: .sentinel/tsnet
-  # auto | auth_key | interactive
+  # Optional ACL tags to request during onboarding.
+  advertise_tags:
+    - tag:sentinel
+  # auto | auth_key | oauth | interactive
   login_mode: auto
   # Leave empty to use SENTINEL_TAILSCALE_AUTH_KEY env var.
   auth_key: ""
+  # OAuth client credentials (used when auth key is not set or login_mode=oauth).
+  # client_secret requires client_id.
+  client_secret: ""
+  client_id: ""
+  id_token: ""
+  audience: ""
   allow_interactive_fallback: true
   login_timeout: 5m

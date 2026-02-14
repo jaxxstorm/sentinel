@@ -68,10 +68,17 @@ Ordered list of enabled detector names.
 ### `tsnet`
 - `hostname`
 - `state_dir`
-- `login_mode`: `auto`, `auth_key`, `interactive`
+- `advertise_tags`: list of tags in `tag:<name>` format
+- `login_mode`: `auto`, `auth_key`, `oauth`, `interactive`
 - `auth_key`
+- `client_secret`
+- `client_id`
+- `id_token`
+- `audience`
 - `allow_interactive_fallback`
 - `login_timeout`
+
+`client_secret` requires `client_id`. If OAuth fields are set without `client_secret`, config validation fails.
 
 ## Environment Variable Matrix
 
@@ -93,9 +100,14 @@ Ordered list of enabled detector names.
 | `SENTINEL_OUTPUT_NO_COLOR` | `output.no_color` |
 | `SENTINEL_TSNET_HOSTNAME` | `tsnet.hostname` |
 | `SENTINEL_TSNET_STATE_DIR` | `tsnet.state_dir` |
+| `SENTINEL_TSNET_ADVERTISE_TAGS` | `tsnet.advertise_tags` (JSON array or comma-separated list) |
 | `SENTINEL_TSNET_LOGIN_MODE` | `tsnet.login_mode` |
 | `SENTINEL_TSNET_AUTH_KEY` | `tsnet.auth_key` |
 | `SENTINEL_TAILSCALE_AUTH_KEY` | Tailscale onboarding auth key fallback used by runtime wiring |
+| `SENTINEL_TSNET_CLIENT_SECRET` | `tsnet.client_secret` |
+| `SENTINEL_TSNET_CLIENT_ID` | `tsnet.client_id` |
+| `SENTINEL_TSNET_ID_TOKEN` | `tsnet.id_token` |
+| `SENTINEL_TSNET_AUDIENCE` | `tsnet.audience` |
 | `SENTINEL_TSNET_ALLOW_INTERACTIVE_FALLBACK` | `tsnet.allow_interactive_fallback` |
 | `SENTINEL_TSNET_LOGIN_TIMEOUT` | `tsnet.login_timeout` |
 | `SENTINEL_STATE_PATH` | `state.path` |
@@ -119,6 +131,9 @@ Sentinel resolves the onboarding auth key in this order:
 1. `--tailscale-auth-key` CLI flag
 2. `SENTINEL_TAILSCALE_AUTH_KEY`
 3. `SENTINEL_TSNET_AUTH_KEY` / `tsnet.auth_key`
+
+When both auth key and OAuth credentials are configured, Sentinel prioritizes auth key onboarding.
+OAuth credentials are used when no auth key is resolved (or when `tsnet.login_mode=oauth`).
 
 ## Sink URL Environment Interpolation
 
@@ -152,6 +167,9 @@ Sentinel can run without a config file if all required values are provided via e
 ```bash
 SENTINEL_STATE_PATH=.sentinel/state.json \
 SENTINEL_TSNET_STATE_DIR=.sentinel/tsnet \
+SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
+SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
+SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
 SENTINEL_NOTIFIER_SINKS='[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"${SENTINEL_DISCORD_WEBHOOK_URL}"}]' \
 SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"sinks":["stdout-debug","discord-primary"]}]' \
 go run ./cmd/sentinel validate-config

@@ -146,3 +146,32 @@ func TestBuildRuntimeSupportsEnvOnlyConfig(t *testing.T) {
 		t.Fatal("expected dry-run notification count > 0 for env-only config")
 	}
 }
+
+func TestBuildRuntimeResolvesOAuthCredentialsAndTagsFromEnv(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "sentinel.yaml")
+	cfg := "state:\n  path: " + filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")) + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SENTINEL_TSNET_CLIENT_SECRET", "env-secret")
+	t.Setenv("SENTINEL_TSNET_CLIENT_ID", "env-client-id")
+	t.Setenv("SENTINEL_TSNET_ADVERTISE_TAGS", `["tag:sentinel"]`)
+
+	deps, err := buildRuntime(&GlobalOptions{ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deps.cfg.TSNet.ClientSecret != "env-secret" {
+		t.Fatalf("expected client secret from env, got %q", deps.cfg.TSNet.ClientSecret)
+	}
+	if deps.cfg.TSNet.ClientID != "env-client-id" {
+		t.Fatalf("expected client id from env, got %q", deps.cfg.TSNet.ClientID)
+	}
+	if len(deps.cfg.TSNet.AdvertiseTags) != 1 || deps.cfg.TSNet.AdvertiseTags[0] != "tag:sentinel" {
+		t.Fatalf("unexpected advertise tags: %v", deps.cfg.TSNet.AdvertiseTags)
+	}
+	if deps.cfg.TSNet.CredentialMode != "oauth" {
+		t.Fatalf("expected oauth credential mode, got %q", deps.cfg.TSNet.CredentialMode)
+	}
+}

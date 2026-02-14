@@ -17,6 +17,11 @@ This page documents environment variables used when running Sentinel from the pu
 | `SENTINEL_CONFIG_PATH` | No | Config file path used by Sentinel. In the image this defaults to `/sentinel/config.yaml`. |
 | `SENTINEL_TAILSCALE_AUTH_KEY` | Depends on login mode | Auth key for Tailscale onboarding (`tsnet.login_mode=auth_key` requires this unless `tsnet.auth_key` is set in config). |
 | `SENTINEL_TSNET_AUTH_KEY` | No | Maps to `tsnet.auth_key` in config. Used as a lower-priority auth key source than `SENTINEL_TAILSCALE_AUTH_KEY`. |
+| `SENTINEL_TSNET_ADVERTISE_TAGS` | No | Tags requested during enrollment. Accepts JSON array or comma-separated tags (for example `tag:sentinel,tag:prod`). |
+| `SENTINEL_TSNET_CLIENT_SECRET` | Depends on login mode | OAuth client secret for tsnet onboarding credentials. |
+| `SENTINEL_TSNET_CLIENT_ID` | Required with client secret | OAuth client identifier paired with `SENTINEL_TSNET_CLIENT_SECRET`. |
+| `SENTINEL_TSNET_ID_TOKEN` | No | Optional tsnet identity token input for OAuth-related flows. |
+| `SENTINEL_TSNET_AUDIENCE` | No | Optional tsnet audience input for OAuth-related flows. |
 | `SENTINEL_STATE_PATH` | No | Overrides `state.path` for idempotency/state storage. Useful for mounting persistent state in containers. |
 | `SENTINEL_TSNET_STATE_DIR` | Recommended | Sets `tsnet.state_dir` for persisted tsnet state in container volumes. |
 
@@ -25,6 +30,9 @@ Sentinel also supports general config overrides using `SENTINEL_` variables mapp
 - `SENTINEL_OUTPUT_LOG_FORMAT=json`
 - `SENTINEL_OUTPUT_LOG_LEVEL=debug`
 - `SENTINEL_TSNET_STATE_DIR=/var/lib/sentinel/tsnet`
+- `SENTINEL_TSNET_LOGIN_MODE=oauth`
+
+When both auth key and OAuth credentials are configured, Sentinel prioritizes auth key onboarding.
 
 ## Structured Environment Variables (JSON)
 
@@ -68,6 +76,9 @@ notifier:
 docker run --rm \
   -e SENTINEL_CONFIG_PATH=/sentinel/config.yaml \
   -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
+  -e SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
+  -e SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
   -e SENTINEL_WEBHOOK_URL=https://example.test/webhook \
   -e SENTINEL_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... \
   -v "$(pwd)/config.example.yaml:/sentinel/config.yaml:ro" \
@@ -92,6 +103,9 @@ docker run --rm \
   -e SENTINEL_TSNET_STATE_DIR=/var/lib/sentinel/tsnet \
   -e SENTINEL_TSNET_LOGIN_MODE=auto \
   -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
+  -e SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
+  -e SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
   -e SENTINEL_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... \
   -e SENTINEL_NOTIFIER_SINKS='[{\"name\":\"stdout-debug\",\"type\":\"stdout\"},{\"name\":\"discord-primary\",\"type\":\"discord\",\"url\":\"${SENTINEL_DISCORD_WEBHOOK_URL}\"}]' \
   -e SENTINEL_NOTIFIER_ROUTES='[{\"event_types\":[\"*\"],\"sinks\":[\"stdout-debug\",\"discord-primary\"]}]' \

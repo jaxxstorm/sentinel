@@ -31,6 +31,15 @@ func newStatusCmd(opts *GlobalOptions) *cobra.Command {
 			if deps.cfg.TSNet.AuthKeySource != "" && deps.cfg.TSNet.AuthKeySource != "none" {
 				printLine("tailscale_auth_key_source=%s", deps.cfg.TSNet.AuthKeySource)
 			}
+			if deps.cfg.TSNet.CredentialMode != "" && deps.cfg.TSNet.CredentialMode != "none" {
+				printLine("tailscale_credential_mode=%s", deps.cfg.TSNet.CredentialMode)
+			}
+			if deps.cfg.TSNet.CredentialSource != "" && deps.cfg.TSNet.CredentialSource != "none" {
+				printLine("tailscale_credential_source=%s", deps.cfg.TSNet.CredentialSource)
+			}
+			if len(deps.cfg.TSNet.AdvertiseTags) > 0 {
+				printLine("tailscale_advertise_tags=%v", deps.cfg.TSNet.AdvertiseTags)
+			}
 			printEnrollmentStatus(enrollment)
 			return nil
 		},
@@ -57,6 +66,9 @@ func enrollmentStatusLines(st onboarding.Status) []string {
 	lines := []string{fmt.Sprintf("tailscale_status=%s", st.State)}
 	if st.Mode != "" {
 		lines = append(lines, fmt.Sprintf("tailscale_mode=%s", st.Mode))
+	}
+	if st.CredentialSource != "" && st.CredentialSource != "none" {
+		lines = append(lines, fmt.Sprintf("tailscale_credential_source=%s", st.CredentialSource))
 	}
 	if st.NodeID != "" {
 		lines = append(lines, fmt.Sprintf("tailscale_node_id=%s", st.NodeID))

@@ -50,6 +50,45 @@ func TestResolveAuthKeyPrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveOAuthCredentialsPrecedence(t *testing.T) {
+	value, source := ResolveOAuthCredentials(
+		OAuthCredentials{
+			ClientSecret: "env-secret",
+			ClientID:     "env-client",
+		},
+		OAuthCredentials{
+			ClientSecret: "config-secret",
+			ClientID:     "config-client",
+			Audience:     "config-aud",
+		},
+	)
+	if source != "mixed" {
+		t.Fatalf("expected mixed source, got %q", source)
+	}
+	if value.ClientSecret != "env-secret" || value.ClientID != "env-client" || value.Audience != "config-aud" {
+		t.Fatalf("unexpected resolved oauth credentials: %+v", value)
+	}
+}
+
+func TestResolveOAuthCredentialsEnvSourceWhenMergedConfigMatches(t *testing.T) {
+	value, source := ResolveOAuthCredentials(
+		OAuthCredentials{
+			ClientSecret: "env-secret",
+			ClientID:     "env-client",
+		},
+		OAuthCredentials{
+			ClientSecret: "env-secret",
+			ClientID:     "env-client",
+		},
+	)
+	if source != "env" {
+		t.Fatalf("expected env source, got %q", source)
+	}
+	if value.ClientSecret != "env-secret" || value.ClientID != "env-client" {
+		t.Fatalf("unexpected resolved oauth credentials: %+v", value)
+	}
+}
+
 func TestEnsureEnrolledReusesExistingState(t *testing.T) {
 	provider := &fakeProvider{
 		checkStatus: func(context.Context) (ProviderStatus, error) {
@@ -273,6 +312,120 @@ func TestEnsureEnrolledAuthKeyFallbackToInteractive(t *testing.T) {
 	}
 	if st.State != StateJoined {
 		t.Fatalf("expected joined after fallback, got %s", st.State)
+	}
+}
+
+func TestEnsureEnrolledAutoUsesOAuthWhenAuthKeyMissing(t *testing.T) {
+	startCalls := 0
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			if startCalls > 0 {
+				return ProviderStatus{Joined: true, Hostname: "oauth-joined"}, nil
+			}
+			return ProviderStatus{Joined: false, NeedsLogin: false}, nil
+		},
+		start: func(context.Context) error {
+			startCalls++
+			return nil
+		},
+	}
+	mgr := NewManager(Config{
+		Mode: "auto",
+		OAuthCredentials: OAuthCredentials{
+			ClientSecret: "secret",
+			ClientID:     "client",
+		},
+		OAuthSource: "env",
+	}, provider, nil)
+	st, err := mgr.EnsureEnrolled(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode != "oauth" {
+		t.Fatalf("expected oauth mode, got %q", st.Mode)
+	}
+	if st.CredentialSource != "env" {
+		t.Fatalf("expected env credential source, got %q", st.CredentialSource)
+	}
+}
+
+func TestEnsureEnrolledAuthKeyTakesPrecedenceOverOAuthInAuto(t *testing.T) {
+	startCalls := 0
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			if startCalls > 0 {
+				return ProviderStatus{Joined: true, Hostname: "authkey-joined"}, nil
+			}
+			return ProviderStatus{Joined: false, NeedsLogin: false}, nil
+		},
+		start: func(context.Context) error {
+			startCalls++
+			return nil
+		},
+	}
+	const authKey = "tskey-auth-k123"
+	mgr := NewManager(Config{
+		Mode:          "auto",
+		AuthKey:       authKey,
+		AuthKeySource: "env",
+		OAuthCredentials: OAuthCredentials{
+			ClientSecret: "secret",
+			ClientID:     "client",
+		},
+		OAuthSource: "env",
+	}, provider, nil)
+	st, err := mgr.EnsureEnrolled(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.authKey != authKey {
+		t.Fatalf("expected auth key path to be used, got provider authKey=%q", provider.authKey)
+	}
+	if st.Mode != "auth_key" {
+		t.Fatalf("expected auth_key mode, got %q", st.Mode)
+	}
+}
+
+func TestEnsureEnrolledOAuthModeMissingCredentials(t *testing.T) {
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			return ProviderStatus{Joined: false, NeedsLogin: false}, nil
+		},
+	}
+	mgr := NewManager(Config{Mode: "oauth"}, provider, nil)
+	st, err := mgr.EnsureEnrolled(context.Background())
+	if err == nil {
+		t.Fatal("expected oauth credentials missing error")
+	}
+	if st.ErrorCode != "oauth_credentials_missing" {
+		t.Fatalf("expected oauth_credentials_missing, got %s", st.ErrorCode)
+	}
+}
+
+func TestEnrollmentErrorDoesNotLeakOAuthSecret(t *testing.T) {
+	rawSecret := "oauth-super-secret-value"
+	provider := &fakeProvider{
+		checkStatus: func(context.Context) (ProviderStatus, error) {
+			return ProviderStatus{Joined: false, NeedsLogin: false}, nil
+		},
+		start: func(context.Context) error {
+			return errors.New("oauth failed with secret " + rawSecret)
+		},
+	}
+	mgr := NewManager(Config{
+		Mode: "oauth",
+		OAuthCredentials: OAuthCredentials{
+			ClientSecret: rawSecret,
+			ClientID:     "client-id",
+		},
+		OAuthSource: "config",
+	}, provider, nil)
+	_, err := mgr.EnsureEnrolled(context.Background())
+	if err == nil {
+		t.Fatal("expected oauth error")
+	}
+	if strings.Contains(err.Error(), rawSecret) {
+		t.Fatal("raw oauth secret leaked in error output")
 	}
 }
 

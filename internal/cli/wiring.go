@@ -66,6 +66,36 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	)
 	cfg.TSNet.AuthKey = authKey
 	cfg.TSNet.AuthKeySource = sourceName
+	oauthCreds, oauthSource := onboarding.ResolveOAuthCredentials(
+		onboarding.OAuthCredentials{
+			ClientSecret: os.Getenv("SENTINEL_TSNET_CLIENT_SECRET"),
+			ClientID:     os.Getenv("SENTINEL_TSNET_CLIENT_ID"),
+			IDToken:      os.Getenv("SENTINEL_TSNET_ID_TOKEN"),
+			Audience:     os.Getenv("SENTINEL_TSNET_AUDIENCE"),
+		},
+		onboarding.OAuthCredentials{
+			ClientSecret: cfg.TSNet.ClientSecret,
+			ClientID:     cfg.TSNet.ClientID,
+			IDToken:      cfg.TSNet.IDToken,
+			Audience:     cfg.TSNet.Audience,
+		},
+	)
+	cfg.TSNet.ClientSecret = oauthCreds.ClientSecret
+	cfg.TSNet.ClientID = oauthCreds.ClientID
+	cfg.TSNet.IDToken = oauthCreds.IDToken
+	cfg.TSNet.Audience = oauthCreds.Audience
+	cfg.TSNet.OAuthSource = oauthSource
+	switch {
+	case cfg.TSNet.AuthKeySource != "" && cfg.TSNet.AuthKeySource != "none":
+		cfg.TSNet.CredentialMode = "auth_key"
+		cfg.TSNet.CredentialSource = cfg.TSNet.AuthKeySource
+	case oauthCreds.Configured():
+		cfg.TSNet.CredentialMode = "oauth"
+		cfg.TSNet.CredentialSource = oauthSource
+	default:
+		cfg.TSNet.CredentialMode = "none"
+		cfg.TSNet.CredentialSource = "none"
+	}
 	if err := config.Validate(cfg); err != nil {
 		return nil, err
 	}
@@ -163,10 +193,16 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	notifier := notify.New(notify.Config{Routes: routes, IdempotencyKeyTTL: cfg.Notifier.IdempotencyKeyTTL}, st, sinks)
 
 	ts := &tsnet.Server{
-		Hostname: cfg.TSNet.Hostname,
-		Dir:      cfg.TSNet.StateDir,
-		UserLogf: logging.LogfAdapter(logging.WithSource(logger, logging.LogSourceTailscale), zapcore.InfoLevel),
-		Logf:     logging.LogfAdapter(logging.WithSource(logger, logging.LogSourceTailscale), zapcore.DebugLevel),
+		Hostname:      cfg.TSNet.Hostname,
+		Dir:           cfg.TSNet.StateDir,
+		AuthKey:       cfg.TSNet.AuthKey,
+		AdvertiseTags: append([]string(nil), cfg.TSNet.AdvertiseTags...),
+		ClientSecret:  cfg.TSNet.ClientSecret,
+		ClientID:      cfg.TSNet.ClientID,
+		IDToken:       cfg.TSNet.IDToken,
+		Audience:      cfg.TSNet.Audience,
+		UserLogf:      logging.LogfAdapter(logging.WithSource(logger, logging.LogSourceTailscale), zapcore.InfoLevel),
+		Logf:          logging.LogfAdapter(logging.WithSource(logger, logging.LogSourceTailscale), zapcore.DebugLevel),
 	}
 	var src source.NetmapSource
 	switch strings.ToLower(strings.TrimSpace(cfg.Source.Mode)) {
@@ -182,9 +218,16 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 		return nil, fmt.Errorf("unsupported source.mode %q", cfg.Source.Mode)
 	}
 	enrollment := onboarding.NewManager(onboarding.Config{
-		Mode:                     cfg.TSNet.LoginMode,
-		AuthKey:                  cfg.TSNet.AuthKey,
-		AuthKeySource:            cfg.TSNet.AuthKeySource,
+		Mode:          cfg.TSNet.LoginMode,
+		AuthKey:       cfg.TSNet.AuthKey,
+		AuthKeySource: cfg.TSNet.AuthKeySource,
+		OAuthCredentials: onboarding.OAuthCredentials{
+			ClientSecret: cfg.TSNet.ClientSecret,
+			ClientID:     cfg.TSNet.ClientID,
+			IDToken:      cfg.TSNet.IDToken,
+			Audience:     cfg.TSNet.Audience,
+		},
+		OAuthSource:              cfg.TSNet.OAuthSource,
 		AllowInteractiveFallback: cfg.TSNet.AllowInteractiveFallback,
 		LoginTimeout:             cfg.TSNet.LoginTimeout,
 	}, onboarding.NewTSNetProvider(ts), sentinelLogger)

@@ -2,3 +2,6 @@
 
 # config file
 config.yaml
+
+.gocache
+.gomodcache

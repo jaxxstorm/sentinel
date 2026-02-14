@@ -76,7 +76,7 @@ func (m *manager) Probe(ctx context.Context) (Status, error) {
 
 func (m *manager) primeProviderAuthKey() {
 	mode := NormalizeMode(m.cfg.Mode)
-	if mode == "" || mode == "interactive" {
+	if mode == "" || mode == "interactive" || mode == "oauth" {
 		return
 	}
 	authKey := strings.TrimSpace(m.cfg.AuthKey)
@@ -94,16 +94,22 @@ func (m *manager) EnsureEnrolled(ctx context.Context) (Status, error) {
 
 	mode := NormalizeMode(m.cfg.Mode)
 	if mode == "" {
-		return m.fail("invalid_login_mode", ErrorClassNonRetryable, "unsupported tailscale login mode", "use tailscale.login_mode=auto|auth_key|interactive", nil)
+		return m.fail("invalid_login_mode", ErrorClassNonRetryable, "unsupported tailscale login mode", "use tailscale.login_mode=auto|auth_key|oauth|interactive", nil)
 	}
 	if mode == "auto" {
 		if strings.TrimSpace(m.cfg.AuthKey) != "" {
 			return m.tryAuthKey(ctx, true)
 		}
+		if m.cfg.OAuthCredentials.Configured() {
+			return m.tryOAuth(ctx, true)
+		}
 		return m.tryInteractive(ctx)
 	}
 	if mode == "auth_key" {
 		return m.tryAuthKey(ctx, m.cfg.AllowInteractiveFallback)
+	}
+	if mode == "oauth" {
+		return m.tryOAuth(ctx, m.cfg.AllowInteractiveFallback)
 	}
 	return m.tryInteractive(ctx)
 }
@@ -118,33 +124,78 @@ func (m *manager) tryAuthKey(ctx context.Context, allowFallback bool) (Status, e
 	}
 
 	m.provider.SetAuthKey(authKey)
-	m.setStatus(Status{State: StateJoining, Mode: "auth_key", Message: "attempting auth key enrollment"})
+	m.setStatus(Status{
+		State:            StateJoining,
+		Mode:             "auth_key",
+		CredentialSource: m.cfg.AuthKeySource,
+		Message:          "attempting auth key enrollment",
+	})
 	if err := m.provider.Start(ctx); err != nil {
 		if allowFallback {
 			m.logger.Warn("auth key onboarding failed, trying interactive fallback", zap.String("error_class", string(classifyError(err))))
 			return m.tryInteractive(ctx)
 		}
-		return m.fail("auth_key_start_failed", classifyError(err), "tailscale auth key enrollment failed", "verify key validity and tailnet policy", err)
+		return m.failWithMode("auth_key", "auth_key_start_failed", classifyError(err), "tailscale auth key enrollment failed", "verify key validity and tailnet policy", err)
 	}
 	ps, err := m.waitForAuthKeyEnrollment(ctx)
 	if err != nil {
 		if allowFallback {
 			return m.tryInteractive(ctx)
 		}
-		return m.fail("auth_key_status_failed", classifyError(err), "unable to verify auth key enrollment status", "retry and verify tailscale daemon state", err)
+		return m.failWithMode("auth_key", "auth_key_status_failed", classifyError(err), "unable to verify auth key enrollment status", "retry and verify tailscale daemon state", err)
 	}
 	if ps.Joined {
 		st := statusFromProvider(ps, "auth_key")
+		st.CredentialSource = m.cfg.AuthKeySource
 		m.setStatus(st)
 		return st, nil
 	}
 	if !ps.NeedsLogin {
-		return m.fail("auth_key_pending", ErrorClassRetryable, "tailscale auth key enrollment is still in progress", "retry startup and verify tailscale connectivity", nil)
+		return m.failWithMode("auth_key", "auth_key_pending", ErrorClassRetryable, "tailscale auth key enrollment is still in progress", "retry startup and verify tailscale connectivity", nil)
 	}
 	if allowFallback {
 		return m.tryInteractive(ctx)
 	}
-	return m.fail("auth_key_rejected", ErrorClassNonRetryable, "auth key enrollment did not join the tailnet", "verify key validity/expiry and tailnet ACL policy", nil)
+	return m.failWithMode("auth_key", "auth_key_rejected", ErrorClassNonRetryable, "auth key enrollment did not join the tailnet", "verify key validity/expiry and tailnet ACL policy", nil)
+}
+
+func (m *manager) tryOAuth(ctx context.Context, allowFallback bool) (Status, error) {
+	if !m.cfg.OAuthCredentials.Configured() {
+		return m.failWithMode("oauth", "oauth_credentials_missing", ErrorClassNonRetryable, "oauth credentials are required for oauth mode", "set tsnet.client_secret and required companion fields", nil)
+	}
+	m.setStatus(Status{
+		State:            StateJoining,
+		Mode:             "oauth",
+		CredentialSource: m.cfg.OAuthSource,
+		Message:          "attempting oauth credential enrollment",
+	})
+	if err := m.provider.Start(ctx); err != nil {
+		if allowFallback {
+			m.logger.Warn("oauth onboarding failed, trying interactive fallback", zap.String("error_class", string(classifyError(err))))
+			return m.tryInteractive(ctx)
+		}
+		return m.failWithMode("oauth", "oauth_start_failed", classifyError(err), "tailscale oauth enrollment failed", "verify oauth credential validity and tailnet policy", err)
+	}
+	ps, err := m.waitForAuthKeyEnrollment(ctx)
+	if err != nil {
+		if allowFallback {
+			return m.tryInteractive(ctx)
+		}
+		return m.failWithMode("oauth", "oauth_status_failed", classifyError(err), "unable to verify oauth enrollment status", "retry and verify tailscale daemon state", err)
+	}
+	if ps.Joined {
+		st := statusFromProvider(ps, "oauth")
+		st.CredentialSource = m.cfg.OAuthSource
+		m.setStatus(st)
+		return st, nil
+	}
+	if !ps.NeedsLogin {
+		return m.failWithMode("oauth", "oauth_pending", ErrorClassRetryable, "tailscale oauth enrollment is still in progress", "retry startup and verify tailscale connectivity", nil)
+	}
+	if allowFallback {
+		return m.tryInteractive(ctx)
+	}
+	return m.failWithMode("oauth", "oauth_rejected", ErrorClassNonRetryable, "oauth enrollment did not join the tailnet", "verify oauth credentials and tailnet ACL policy", nil)
 }
 
 func (m *manager) waitForAuthKeyEnrollment(ctx context.Context) (ProviderStatus, error) {
@@ -213,13 +264,23 @@ func (m *manager) tryInteractive(ctx context.Context) (Status, error) {
 }
 
 func (m *manager) fail(code string, class ErrorClass, msg string, remediation string, cause error) (Status, error) {
+	return m.failWithMode(NormalizeMode(m.cfg.Mode), code, class, msg, remediation, cause)
+}
+
+func (m *manager) failWithMode(mode, code string, class ErrorClass, msg string, remediation string, cause error) (Status, error) {
 	st := Status{
 		State:       StateAuthFailed,
-		Mode:        NormalizeMode(m.cfg.Mode),
+		Mode:        mode,
 		ErrorCode:   code,
 		ErrorClass:  class,
 		Message:     msg,
 		Remediation: remediation,
+	}
+	switch mode {
+	case "auth_key":
+		st.CredentialSource = m.cfg.AuthKeySource
+	case "oauth":
+		st.CredentialSource = m.cfg.OAuthSource
 	}
 	m.setStatus(st)
 	return st, &EnrollmentError{Code: code, Class: class, Message: msg, Cause: cause}
@@ -250,6 +311,9 @@ func (m *manager) setStatus(st Status) {
 	if st.LoginURL != "" {
 		fields = append(fields, zap.String("login_url", st.LoginURL))
 	}
+	if st.CredentialSource != "" && st.CredentialSource != "none" {
+		fields = append(fields, zap.String("credential_source", st.CredentialSource))
+	}
 	if st.State == StateAuthFailed {
 		if st.ErrorClass == ErrorClassRetryable {
 			m.logger.Warn("tailscale onboarding status", fields...)
@@ -270,6 +334,7 @@ func onboardingStatusLogKey(st Status) string {
 		st.NodeID,
 		st.Hostname,
 		st.LoginURL,
+		st.CredentialSource,
 	}, "|")
 }
 
@@ -292,7 +357,7 @@ func statusFromProvider(ps ProviderStatus, mode string) Status {
 	default:
 		st.State = StateNotJoined
 		st.Message = "node is not yet joined"
-		st.Remediation = "configure auth key or enable interactive login"
+		st.Remediation = "configure auth key, oauth credentials, or enable interactive login"
 	}
 	return st
 }

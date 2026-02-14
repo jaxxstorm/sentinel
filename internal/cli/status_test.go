@@ -29,3 +29,15 @@ func TestRenderStatusSummaryForJoined(t *testing.T) {
 		t.Fatalf("unexpected summary: %s", summary)
 	}
 }
+
+func TestEnrollmentStatusLinesIncludeCredentialSource(t *testing.T) {
+	lines := enrollmentStatusLines(onboarding.Status{
+		State:            onboarding.StateJoining,
+		Mode:             "oauth",
+		CredentialSource: "env",
+	})
+	out := strings.Join(lines, "\n")
+	if !strings.Contains(out, "tailscale_credential_source=env") {
+		t.Fatalf("missing credential source line: %s", out)
+	}
+}

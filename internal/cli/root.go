@@ -29,7 +29,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.LogLevel, "log-level", "", "Log level")
 	cmd.PersistentFlags().BoolVar(&opts.NoColor, "no-color", false, "Disable ANSI color output")
 	cmd.PersistentFlags().StringVar(&opts.TailscaleAuthKey, "tailscale-auth-key", "", "Tailscale auth key for node onboarding")
-	cmd.PersistentFlags().StringVar(&opts.TailscaleLoginMode, "tailscale-login-mode", "", "Tailscale onboarding mode: auto|auth_key|interactive")
+	cmd.PersistentFlags().StringVar(&opts.TailscaleLoginMode, "tailscale-login-mode", "", "Tailscale onboarding mode: auto|auth_key|oauth|interactive")
 	cmd.PersistentFlags().StringVar(&opts.TailscaleStateDir, "tailscale-state-dir", "", "Tailscale tsnet state directory")
 	cmd.PersistentFlags().DurationVar(&opts.TailscaleLoginTimeout, "tailscale-login-timeout", 0, "Timeout for interactive tailscale login")
 	cmd.PersistentFlags().BoolVar(&opts.TailscaleFallbackOverride, "tailscale-allow-interactive-fallback", false, "Allow fallback to interactive login after auth key failure")

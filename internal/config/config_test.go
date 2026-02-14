@@ -346,3 +346,109 @@ func TestLoadFileConfigRemainsUnchangedWithoutStructuredEnv(t *testing.T) {
 		t.Fatalf("expected file-based sink to remain present, got %+v", cfg.Notifier.Sinks)
 	}
 }
+
+func TestLoadSupportsTSNetAdvertiseTagsEnvJSON(t *testing.T) {
+	t.Setenv(envVarTSNetTags, `["tag:prod","tag:sentinel"]`)
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TSNet.AdvertiseTags) != 2 {
+		t.Fatalf("expected 2 advertise tags, got %d", len(cfg.TSNet.AdvertiseTags))
+	}
+	if cfg.TSNet.AdvertiseTags[0] != "tag:prod" || cfg.TSNet.AdvertiseTags[1] != "tag:sentinel" {
+		t.Fatalf("unexpected advertise tags: %v", cfg.TSNet.AdvertiseTags)
+	}
+}
+
+func TestLoadSupportsTSNetAdvertiseTagsEnvCSV(t *testing.T) {
+	t.Setenv(envVarTSNetTags, "tag:prod,tag:sentinel")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TSNet.AdvertiseTags) != 2 {
+		t.Fatalf("expected 2 advertise tags, got %d", len(cfg.TSNet.AdvertiseTags))
+	}
+}
+
+func TestValidateRejectsInvalidAdvertiseTag(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.AdvertiseTags = []string{"prod"}
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for invalid advertise tag")
+	}
+	if !strings.Contains(err.Error(), "tsnet.advertise_tags") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateAcceptsOAuthCredentials(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.ClientSecret = "secret-value"
+	cfg.TSNet.ClientID = "client-id"
+
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected oauth credentials to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsOAuthCredentialsWithoutSecret(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.ClientID = "client-id"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error without client secret")
+	}
+	if !strings.Contains(err.Error(), "tsnet.client_secret is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsOAuthCredentialsWithoutClientID(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.ClientSecret = "secret-value"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error without client id")
+	}
+	if !strings.Contains(err.Error(), "tsnet.client_id is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRequiresCredentialsForOAuthMode(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.LoginMode = "oauth"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for oauth mode without credentials")
+	}
+	if !strings.Contains(err.Error(), "required for oauth login mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadSupportsOAuthCredentialsFromEnv(t *testing.T) {
+	t.Setenv("SENTINEL_TSNET_LOGIN_MODE", "oauth")
+	t.Setenv(envVarTSNetClientSecret, "env-secret")
+	t.Setenv(envVarTSNetClientID, "env-client")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("expected env oauth config to validate, got %v", err)
+	}
+	if cfg.TSNet.ClientSecret != "env-secret" {
+		t.Fatalf("expected client secret from env, got %q", cfg.TSNet.ClientSecret)
+	}
+	if cfg.TSNet.ClientID != "env-client" {
+		t.Fatalf("expected client id from env, got %q", cfg.TSNet.ClientID)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -75,20 +76,35 @@ type TSNetConfig struct {
 	Hostname                 string        `mapstructure:"hostname" json:"hostname"`
 	StateDir                 string        `mapstructure:"state_dir" json:"state_dir"`
 	AuthKey                  string        `mapstructure:"auth_key" json:"auth_key"`
+	AdvertiseTags            []string      `mapstructure:"advertise_tags" json:"advertise_tags"`
+	ClientSecret             string        `mapstructure:"client_secret" json:"client_secret"`
+	ClientID                 string        `mapstructure:"client_id" json:"client_id"`
+	IDToken                  string        `mapstructure:"id_token" json:"id_token"`
+	Audience                 string        `mapstructure:"audience" json:"audience"`
 	LoginMode                string        `mapstructure:"login_mode" json:"login_mode"`
 	AllowInteractiveFallback bool          `mapstructure:"allow_interactive_fallback" json:"allow_interactive_fallback"`
 	LoginTimeout             time.Duration `mapstructure:"login_timeout" json:"login_timeout"`
 	AuthKeySource            string        `mapstructure:"-"`
+	OAuthSource              string        `mapstructure:"-"`
+	CredentialMode           string        `mapstructure:"-"`
+	CredentialSource         string        `mapstructure:"-"`
 }
 
 const (
-	envVarConfigPath     = "SENTINEL_CONFIG_PATH"
-	envVarStatePath      = "SENTINEL_STATE_PATH"
-	envVarDetectors      = "SENTINEL_DETECTORS"
-	envVarDetectorOrder  = "SENTINEL_DETECTOR_ORDER"
-	envVarNotifierSinks  = "SENTINEL_NOTIFIER_SINKS"
-	envVarNotifierRoutes = "SENTINEL_NOTIFIER_ROUTES"
+	envVarConfigPath        = "SENTINEL_CONFIG_PATH"
+	envVarStatePath         = "SENTINEL_STATE_PATH"
+	envVarTSNetTags         = "SENTINEL_TSNET_ADVERTISE_TAGS"
+	envVarTSNetClientSecret = "SENTINEL_TSNET_CLIENT_SECRET"
+	envVarTSNetClientID     = "SENTINEL_TSNET_CLIENT_ID"
+	envVarTSNetIDToken      = "SENTINEL_TSNET_ID_TOKEN"
+	envVarTSNetAudience     = "SENTINEL_TSNET_AUDIENCE"
+	envVarDetectors         = "SENTINEL_DETECTORS"
+	envVarDetectorOrder     = "SENTINEL_DETECTOR_ORDER"
+	envVarNotifierSinks     = "SENTINEL_NOTIFIER_SINKS"
+	envVarNotifierRoutes    = "SENTINEL_NOTIFIER_ROUTES"
 )
+
+var advertiseTagPattern = regexp.MustCompile(`^tag:[A-Za-z0-9._-]+$`)
 
 func Default() Config {
 	return Config{
@@ -192,6 +208,17 @@ func Load(path string) (Config, error) {
 	if envPath := strings.TrimSpace(os.Getenv(envVarStatePath)); envPath != "" {
 		cfg.State.Path = envPath
 	}
+	if rawTags, ok := os.LookupEnv(envVarTSNetTags); ok {
+		tags, err := parseStringListEnv(envVarTSNetTags, rawTags)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.TSNet.AdvertiseTags = tags
+	}
+	applyStringEnvOverride(envVarTSNetClientSecret, &cfg.TSNet.ClientSecret)
+	applyStringEnvOverride(envVarTSNetClientID, &cfg.TSNet.ClientID)
+	applyStringEnvOverride(envVarTSNetIDToken, &cfg.TSNet.IDToken)
+	applyStringEnvOverride(envVarTSNetAudience, &cfg.TSNet.Audience)
 	return cfg, Validate(cfg)
 }
 
@@ -256,6 +283,42 @@ func decodeEnvJSON(key string, target any) (bool, error) {
 	return true, nil
 }
 
+func parseStringListEnv(key, raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("parse %s: value is empty; expected JSON array or comma-separated list", key)
+	}
+	if strings.HasPrefix(raw, "[") {
+		var values []string
+		if err := json.Unmarshal([]byte(raw), &values); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", key, err)
+		}
+		for i, value := range values {
+			values[i] = strings.TrimSpace(value)
+			if values[i] == "" {
+				return nil, fmt.Errorf("parse %s: values must not be empty", key)
+			}
+		}
+		return values, nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			return nil, fmt.Errorf("parse %s: values must not be empty", key)
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func applyStringEnvOverride(key string, target *string) {
+	if raw, ok := os.LookupEnv(key); ok {
+		*target = strings.TrimSpace(raw)
+	}
+}
+
 func expandEnvPlaceholders(cfg *Config) {
 	for i := range cfg.Notifier.Sinks {
 		url := strings.TrimSpace(cfg.Notifier.Sinks[i].URL)
@@ -294,12 +357,39 @@ func Validate(cfg Config) error {
 	}
 	mode := strings.ToLower(strings.TrimSpace(cfg.TSNet.LoginMode))
 	switch mode {
-	case "", "auto", "auth_key", "interactive":
+	case "", "auto", "auth_key", "oauth", "interactive":
 	default:
-		return fmt.Errorf("tsnet.login_mode must be auto, auth_key, or interactive")
+		return fmt.Errorf("tsnet.login_mode must be auto, auth_key, oauth, or interactive")
 	}
 	if cfg.TSNet.LoginTimeout <= 0 {
 		return fmt.Errorf("tsnet.login_timeout must be > 0")
+	}
+	for i, rawTag := range cfg.TSNet.AdvertiseTags {
+		tag := strings.TrimSpace(rawTag)
+		if tag == "" {
+			return fmt.Errorf("tsnet.advertise_tags[%d] must not be empty", i)
+		}
+		if !advertiseTagPattern.MatchString(tag) {
+			return fmt.Errorf("tsnet.advertise_tags[%d] must match tag:<name> format", i)
+		}
+		cfg.TSNet.AdvertiseTags[i] = tag
+	}
+	clientSecret := strings.TrimSpace(cfg.TSNet.ClientSecret)
+	clientID := strings.TrimSpace(cfg.TSNet.ClientID)
+	idToken := strings.TrimSpace(cfg.TSNet.IDToken)
+	audience := strings.TrimSpace(cfg.TSNet.Audience)
+	cfg.TSNet.ClientSecret = clientSecret
+	cfg.TSNet.ClientID = clientID
+	cfg.TSNet.IDToken = idToken
+	cfg.TSNet.Audience = audience
+	if mode == "oauth" && clientSecret == "" {
+		return fmt.Errorf("tsnet.client_secret is required for oauth login mode")
+	}
+	if clientSecret == "" && (clientID != "" || idToken != "" || audience != "") {
+		return fmt.Errorf("tsnet.client_secret is required when oauth credential fields are set")
+	}
+	if clientSecret != "" && clientID == "" {
+		return fmt.Errorf("tsnet.client_id is required when tsnet.client_secret is set")
 	}
 	sourceMode := strings.ToLower(strings.TrimSpace(cfg.Source.Mode))
 	switch sourceMode {
