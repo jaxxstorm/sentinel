@@ -16,7 +16,7 @@ Sentinel SHALL emit typed events beyond presence-only signals by deriving peer, 
 - **THEN** Sentinel emits a `daemon.state.changed` event describing previous and current states
 
 ### Requirement: Sentinel SHALL provide a stable event taxonomy and payload baseline
-Sentinel SHALL define a stable catalog of supported event types and SHALL attach consistent payload keys per event family so sink integrations can process events without source-specific branching.
+Sentinel SHALL define a stable catalog of supported event types and SHALL attach consistent payload keys per event family so sink integrations can process events without source-specific branching, and device-scoped events SHALL include stable selector identity fields (`name`, `tags`, `owners`, `ips`) for route filtering and sink context.
 
 #### Scenario: Event type catalog includes non-presence families
 - **WHEN** operators configure routing for emitted events
@@ -25,6 +25,10 @@ Sentinel SHALL define a stable catalog of supported event types and SHALL attach
 #### Scenario: Payload includes normalized subject and diff context
 - **WHEN** Sentinel emits an event in the expanded catalog
 - **THEN** the event contains `event_type`, `subject_id`, `subject_type`, and payload fields sufficient to identify changed attributes
+
+#### Scenario: Device event payload includes selector identity baseline
+- **WHEN** Sentinel emits a device-scoped event
+- **THEN** event payload includes stable `name`, `tags`, `owners`, and `ips` fields aligned with notifier device selector matching
 
 ### Requirement: Sentinel SHALL suppress duplicate emits for unchanged semantic state
 Sentinel SHALL avoid emitting expanded events when a notification does not produce semantic change in normalized tracked fields.

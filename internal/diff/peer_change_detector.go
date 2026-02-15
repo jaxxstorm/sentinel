@@ -34,12 +34,10 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":   p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"online": p.Online,
-					"tags":   p.Tags,
 					"routes": p.Routes,
-				},
+				}),
 				d.now(),
 			))
 			continue
@@ -51,11 +49,10 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":          p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"before_routes": old.Routes,
 					"after_routes":  p.Routes,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -65,11 +62,10 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":        p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"before_tags": old.Tags,
 					"after_tags":  p.Tags,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -79,12 +75,11 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":               p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"before_authorized":  old.MachineAuthorized,
 					"after_authorized":   p.MachineAuthorized,
 					"machine_authorized": p.MachineAuthorized,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -94,11 +89,10 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":              p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"before_key_expiry": old.KeyExpiry,
 					"after_key_expiry":  p.KeyExpiry,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -108,10 +102,9 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":       p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"key_expiry": p.KeyExpiry,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -121,11 +114,10 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 				id,
 				before.Hash,
 				after.Hash,
-				map[string]any{
-					"name":                 p.Name,
+				mergePayload(deviceIdentityPayload(p), map[string]any{
 					"before_hostinfo_hash": old.HostinfoHash,
 					"after_hostinfo_hash":  p.HostinfoHash,
-				},
+				}),
 				d.now(),
 			))
 		}
@@ -142,7 +134,7 @@ func (d *PeerChangeDetector) Detect(_ context.Context, before, after snapshot.Sn
 			id,
 			before.Hash,
 			after.Hash,
-			map[string]any{"name": old.Name, "reason": "missing_from_netmap"},
+			mergePayload(deviceIdentityPayload(old), map[string]any{"reason": "missing_from_netmap"}),
 			d.now(),
 		))
 	}

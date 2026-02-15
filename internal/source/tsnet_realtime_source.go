@@ -230,6 +230,12 @@ func cloneNetmap(nm Netmap) Netmap {
 		if len(p.Tags) > 0 {
 			clone.Tags = append([]string(nil), p.Tags...)
 		}
+		if len(p.Owners) > 0 {
+			clone.Owners = append([]string(nil), p.Owners...)
+		}
+		if len(p.IPs) > 0 {
+			clone.IPs = append([]string(nil), p.IPs...)
+		}
 		if len(p.Routes) > 0 {
 			clone.Routes = append([]string(nil), p.Routes...)
 		}

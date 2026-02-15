@@ -96,3 +96,55 @@ func TestNormalizeHashChangesForRuntimeFields(t *testing.T) {
 		t.Fatalf("expected runtime field changes to alter hash, got %q", a.Hash)
 	}
 }
+
+func TestNormalizeHashChangesForDeviceIdentityUpdates(t *testing.T) {
+	now := time.Date(2026, 2, 13, 0, 0, 0, 0, time.UTC)
+	a := Normalize(source.Netmap{
+		Peers: []source.Peer{{
+			ID:     "peer-1",
+			Name:   "peer-1",
+			Online: true,
+			Owners: []string{"123"},
+			IPs:    []string{"100.64.0.10"},
+		}},
+	}, now)
+	b := Normalize(source.Netmap{
+		Peers: []source.Peer{{
+			ID:     "peer-1",
+			Name:   "peer-1",
+			Online: true,
+			Owners: []string{"456"},
+			IPs:    []string{"100.64.0.11"},
+		}},
+	}, now)
+
+	if a.Hash == b.Hash {
+		t.Fatalf("expected owner/IP identity changes to alter hash, got %q", a.Hash)
+	}
+}
+
+func TestNormalizeSortsDeviceIdentityFieldsDeterministically(t *testing.T) {
+	now := time.Date(2026, 2, 13, 0, 0, 0, 0, time.UTC)
+	a := Normalize(source.Netmap{
+		Peers: []source.Peer{{
+			ID:     "peer-1",
+			Name:   "peer-1",
+			Online: true,
+			Owners: []string{"456", "123"},
+			IPs:    []string{"fd7a:115c:a1e0::10", "100.64.0.10"},
+		}},
+	}, now)
+	b := Normalize(source.Netmap{
+		Peers: []source.Peer{{
+			ID:     "peer-1",
+			Name:   "peer-1",
+			Online: true,
+			Owners: []string{"123", "456"},
+			IPs:    []string{"100.64.0.10", "fd7a:115c:a1e0::10"},
+		}},
+	}, now)
+
+	if a.Hash != b.Hash {
+		t.Fatalf("expected deterministic identity ordering to preserve hash, got %q != %q", a.Hash, b.Hash)
+	}
+}

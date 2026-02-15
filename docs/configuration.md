@@ -55,6 +55,15 @@ Ordered list of enabled detector names.
   - `discord` sinks require a non-empty webhook URL
 - `routes`: routing rules by event type and severity
   - `event_types` supports explicit values (for example `peer.online`) and wildcard `*` (match all event types)
+  - optional `device` selector narrows peer/device-scoped events:
+    - `device.names`: match by device name
+    - `device.tags`: match when any configured tag is present
+    - `device.owners`: match by stable owner identity values
+    - `device.ips`: match by literal IP addresses
+  - selector semantics are deterministic:
+    - OR within each selector field (`names`, `tags`, `owners`, `ips`)
+    - AND across configured selector fields
+    - routes with `device` selectors do not match non-device events (for example `daemon.state.changed`)
 
 ### `state`
 - `path`: state file path
@@ -174,8 +183,234 @@ SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
 SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
 SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
 SENTINEL_NOTIFIER_SINKS='[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"${SENTINEL_DISCORD_WEBHOOK_URL}"}]' \
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"sinks":["stdout-debug","discord-primary"]}]' \
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"names":["sentinel"],"tags":["tag:dev"],"owners":["123"],"ips":["100.64.0.10"]},"sinks":["stdout-debug","discord-primary"]}]' \
 go run ./cmd/sentinel validate-config
+```
+
+## Routing Examples (JSON + Env)
+
+All examples below assume sink names already exist under `notifier.sinks`.
+
+Tips:
+- `SENTINEL_NOTIFIER_ROUTES` must be a JSON array.
+- `device` selectors are optional. If omitted, routing is based on `event_types`/`severities` only.
+- Selector behavior is OR within a field and AND across fields.
+- `device.owners` matches stable owner identity values (for example user IDs).
+
+### 1) Only route notifications for devices with tag `tag:foo`
+
+JSON file snippet (`sentinel.json`):
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "device": {
+          "tags": ["tag:foo"]
+        },
+        "sinks": ["discord-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"tags":["tag:foo"]},"sinks":["discord-primary"]}]'
+```
+
+### 2) Only route `peer.online` events for devices with tag `tag:foo`
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["peer.online"],
+        "device": {
+          "tags": ["tag:foo"]
+        },
+        "sinks": ["discord-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"tags":["tag:foo"]},"sinks":["discord-primary"]}]'
+```
+
+### 3) Only route online/offline events for one device name
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["peer.online", "peer.offline"],
+        "device": {
+          "names": ["laptop-01"]
+        },
+        "sinks": ["stdout-debug"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online","peer.offline"],"device":{"names":["laptop-01"]},"sinks":["stdout-debug"]}]'
+```
+
+### 4) Only route notifications for devices owned by user `123`
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "device": {
+          "owners": ["123"]
+        },
+        "sinks": ["webhook-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"owners":["123"]},"sinks":["webhook-primary"]}]'
+```
+
+### 5) Only route notifications for devices with a specific IP
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "device": {
+          "ips": ["100.64.0.10"]
+        },
+        "sinks": ["discord-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"ips":["100.64.0.10"]},"sinks":["discord-primary"]}]'
+```
+
+### 6) Only route online events for one exact device (`name` + `tag`)
+
+This matches only when both conditions are true.
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["peer.online"],
+        "device": {
+          "names": ["node-a"],
+          "tags": ["tag:prod"]
+        },
+        "sinks": ["webhook-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"names":["node-a"],"tags":["tag:prod"]},"sinks":["webhook-primary"]}]'
+```
+
+### 7) Wildcard event families, but only for selected device subset
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "device": {
+          "tags": ["tag:prod", "tag:staging"],
+          "owners": ["123", "456"]
+        },
+        "sinks": ["stdout-debug", "discord-primary"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"tags":["tag:prod","tag:staging"],"owners":["123","456"]},"sinks":["stdout-debug","discord-primary"]}]'
+```
+
+### 8) Multiple routes: targeted online alerts + broad fallback
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["peer.online"],
+        "device": {
+          "tags": ["tag:critical"]
+        },
+        "sinks": ["discord-primary"]
+      },
+      {
+        "event_types": ["*"],
+        "sinks": ["stdout-debug"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"tags":["tag:critical"]},"sinks":["discord-primary"]},{"event_types":["*"],"sinks":["stdout-debug"]}]'
 ```
 
 ## Full Example

@@ -177,6 +177,59 @@ func TestValidateRejectsEmptyNotifierEventTypes(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsDeviceSelectorRoute(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Device: DeviceSelectorConfig{
+			Names:  []string{"nas-01"},
+			Tags:   []string{"tag:prod"},
+			Owners: []string{"123"},
+			IPs:    []string{"100.64.0.10"},
+		},
+	}}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected device selector route to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsEmptyDeviceSelectorValues(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Device: DeviceSelectorConfig{
+			Names: []string{" "},
+		},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for empty device selector value")
+	}
+	if !strings.Contains(err.Error(), "notifier.routes[0].device.names[0]") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidDeviceSelectorIP(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Device: DeviceSelectorConfig{
+			IPs: []string{"100.64.0.999"},
+		},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for invalid device selector IP")
+	}
+	if !strings.Contains(err.Error(), "must be a valid IP address") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateAcceptsDiscordSink(t *testing.T) {
 	cfg := Default()
 	cfg.Notifier.Sinks = append(cfg.Notifier.Sinks, SinkConfig{
@@ -225,7 +278,7 @@ func TestLoadSupportsStructuredEnvOnlyConfig(t *testing.T) {
 	t.Setenv(envVarDetectors, `{"presence":{"enabled":true},"runtime":{"enabled":false}}`)
 	t.Setenv(envVarDetectorOrder, `["presence","runtime"]`)
 	t.Setenv(envVarNotifierSinks, `[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"https://discord.com/api/webhooks/a/b"}]`)
-	t.Setenv(envVarNotifierRoutes, `[{"event_types":["*"],"severities":[],"sinks":["stdout-debug","discord-primary"]}]`)
+	t.Setenv(envVarNotifierRoutes, `[{"event_types":["*"],"severities":[],"sinks":["stdout-debug","discord-primary"],"device":{"names":["nas-01"],"owners":["123"],"ips":["100.64.0.10"]}}]`)
 	t.Setenv(envVarStatePath, filepath.Join(t.TempDir(), "state.json"))
 
 	cfg, err := Load("")
@@ -250,6 +303,9 @@ func TestLoadSupportsStructuredEnvOnlyConfig(t *testing.T) {
 	}
 	if len(cfg.Notifier.Routes) != 1 || len(cfg.Notifier.Routes[0].EventTypes) != 1 || cfg.Notifier.Routes[0].EventTypes[0] != "*" {
 		t.Fatalf("unexpected notifier routes: %+v", cfg.Notifier.Routes)
+	}
+	if len(cfg.Notifier.Routes[0].Device.Names) != 1 || cfg.Notifier.Routes[0].Device.Names[0] != "nas-01" {
+		t.Fatalf("expected structured env route device selector to load, got %+v", cfg.Notifier.Routes[0].Device)
 	}
 }
 

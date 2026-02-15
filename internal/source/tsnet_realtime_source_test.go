@@ -68,6 +68,10 @@ func notifyWithPeer(stableID, name string, online bool) ipn.Notify {
 		ComputedName: name,
 		Online:       &on,
 		User:         tailcfg.UserID(123),
+		Addresses: []netip.Prefix{
+			netip.MustParsePrefix("100.64.0.40/32"),
+			netip.MustParsePrefix("fd7a:115c:a1e0::40/128"),
+		},
 	}).View()
 
 	return ipn.Notify{
@@ -136,6 +140,12 @@ func TestTSNetRealtimeSourceBootstrapsFromInitialNetmap(t *testing.T) {
 	}
 	if nm.Peers[0].ID != "peer-1" {
 		t.Fatalf("expected peer id peer-1, got %q", nm.Peers[0].ID)
+	}
+	if got := len(nm.Peers[0].Owners); got != 1 || nm.Peers[0].Owners[0] != "123" {
+		t.Fatalf("expected canonical owner identity [123], got %#v", nm.Peers[0].Owners)
+	}
+	if got := len(nm.Peers[0].IPs); got != 2 || nm.Peers[0].IPs[0] != "100.64.0.40" {
+		t.Fatalf("expected canonical identity IPs, got %#v", nm.Peers[0].IPs)
 	}
 
 	entries := observed.FilterMessage("ipnbus event received").All()

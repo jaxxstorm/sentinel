@@ -15,6 +15,8 @@ type Peer struct {
 	Name              string            `json:"name"`
 	Online            bool              `json:"online"`
 	Tags              []string          `json:"tags,omitempty"`
+	Owners            []string          `json:"owners,omitempty"`
+	IPs               []string          `json:"ips,omitempty"`
 	Routes            []string          `json:"routes,omitempty"`
 	MachineAuthorized bool              `json:"machine_authorized,omitempty"`
 	Expired           bool              `json:"expired,omitempty"`

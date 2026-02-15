@@ -81,6 +81,39 @@ func realtimeNotifyWithRoutes(stableID string, online bool, routes []string) ipn
 	return ipn.Notify{NetMap: &netmap.NetworkMap{Peers: []tailcfg.NodeView{node}}}
 }
 
+type realtimePeerState struct {
+	id        string
+	online    bool
+	userID    tailcfg.UserID
+	tags      []string
+	addresses []string
+}
+
+func realtimeNotifyPeers(peers ...realtimePeerState) ipn.Notify {
+	nodes := make([]tailcfg.NodeView, 0, len(peers))
+	for _, peer := range peers {
+		on := peer.online
+		addrs := make([]netip.Prefix, 0, len(peer.addresses))
+		for _, raw := range peer.addresses {
+			if prefix, err := netip.ParsePrefix(raw); err == nil {
+				addrs = append(addrs, prefix)
+			}
+		}
+		node := (&tailcfg.Node{
+			ID:           tailcfg.NodeID(1),
+			StableID:     tailcfg.StableNodeID(peer.id),
+			Name:         peer.id + ".tail.test.",
+			ComputedName: peer.id,
+			Online:       &on,
+			User:         peer.userID,
+			Tags:         peer.tags,
+			Addresses:    addrs,
+		}).View()
+		nodes = append(nodes, node)
+	}
+	return ipn.Notify{NetMap: &netmap.NetworkMap{Peers: nodes}}
+}
+
 func newRealtimeRunnerForTest(t *testing.T, watcherFactory source.IPNBusWatcherFactory) (*Runner, *fakeSink) {
 	t.Helper()
 
@@ -374,5 +407,69 @@ func TestRealtimeRunnerPresenceDeliveryUnchangedWithExplicitRoute(t *testing.T) 
 	// Presence + peer.added are generated, but explicit route should only deliver peer.online.
 	if sink.sent != 1 {
 		t.Fatalf("expected explicit presence route to deliver one notification, got %d", sink.sent)
+	}
+}
+
+func TestRealtimeRunnerWildcardRouteWithDeviceFilterScopesNotifications(t *testing.T) {
+	cfg := config.Default()
+	cfg.Source.Mode = "realtime"
+	cfg.DetectorOrder = []string{"presence"}
+	cfg.Detectors["presence"] = config.Detector{Enabled: true}
+	cfg.Policy.BatchSize = 10
+
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{}
+	notifier := notify.New(notify.Config{
+		Routes: []notify.Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{sink.Name()},
+			Device: notify.DeviceSelector{
+				Names: []string{"peer-selected"},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}, store, []notify.Sink{sink})
+
+	watcher := &realtimeWatcher{
+		steps: []realtimeWatchStep{
+			{note: realtimeNotifyPeers(
+				realtimePeerState{id: "peer-selected", online: true, userID: 7, tags: []string{"tag:prod"}, addresses: []string{"100.64.0.50/32"}},
+				realtimePeerState{id: "peer-other", online: true, userID: 8, tags: []string{"tag:dev"}, addresses: []string{"100.64.0.60/32"}},
+			)},
+		},
+	}
+	src := source.NewTSNetRealtimeSource(&tsnet.Server{}, source.RealtimeConfig{
+		Logger:       zap.NewNop(),
+		ReconnectMin: time.Millisecond,
+		ReconnectMax: 5 * time.Millisecond,
+		NewLocalClient: func(*tsnet.Server) (*local.Client, error) {
+			return &local.Client{}, nil
+		},
+		NewWatcher: func(context.Context, *local.Client, ipn.NotifyWatchOpt) (source.IPNBusWatcher, error) {
+			return watcher, nil
+		},
+	})
+
+	runner := NewRunner(
+		cfg,
+		src,
+		diff.NewEngine([]diff.Detector{diff.NewPresenceDetector()}),
+		policy.NewEngine(policy.Config{BatchSize: 10}),
+		notifier,
+		store,
+		nil,
+		zap.NewNop(),
+		nil,
+	)
+
+	res, err := runner.RunOnce(context.Background(), false)
+	if err != nil {
+		t.Fatalf("run once failed: %v", err)
+	}
+	if len(res.Events) != 2 {
+		t.Fatalf("expected two wildcard-matched presence events before device filtering, got %#v", res.Events)
+	}
+	if sink.sent != 1 {
+		t.Fatalf("expected device filter to reduce notifications to one selected device, got %d sends", sink.sent)
 	}
 }
