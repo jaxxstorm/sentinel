@@ -45,9 +45,11 @@ jobs:
           elapsed=$((end_epoch - JOB_START_EPOCH))
           target=90
           echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
-          echo "### workflow-lint duration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
-          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### workflow-lint duration"
+            echo "- elapsed: ${elapsed}s"
+            echo "- target: <= ${target}s"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$elapsed" -gt "$target" ]; then
             echo "::warning::workflow-lint exceeded target (${elapsed}s > ${target}s)"
           fi
@@ -105,9 +107,11 @@ jobs:
           elapsed=$((end_epoch - JOB_START_EPOCH))
           target=420
           echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
-          echo "### goreleaser-validate duration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
-          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### goreleaser-validate duration"
+            echo "- elapsed: ${elapsed}s"
+            echo "- target: <= ${target}s"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$elapsed" -gt "$target" ]; then
             echo "::warning::goreleaser-validate exceeded target (${elapsed}s > ${target}s)"
           fi
@@ -155,9 +159,11 @@ jobs:
           elapsed=$((end_epoch - JOB_START_EPOCH))
           target=240
           echo "elapsed=${elapsed}" >> "$GITHUB_OUTPUT"
-          echo "### docker-dry-run duration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
-          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### docker-dry-run duration"
+            echo "- elapsed: ${elapsed}s"
+            echo "- target: <= ${target}s"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$elapsed" -gt "$target" ]; then
             echo "::warning::docker-dry-run exceeded target (${elapsed}s > ${target}s)"
           fi
