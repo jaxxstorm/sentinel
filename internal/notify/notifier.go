@@ -3,6 +3,8 @@ package notify
 import (
 	"context"
 	"errors"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/jaxxstorm/sentinel/internal/event"
@@ -13,6 +15,21 @@ type Route struct {
 	EventTypes []string
 	Severities []string
 	Sinks      []string
+	Device     DeviceSelector
+}
+
+type DeviceSelector struct {
+	Names  []string
+	Tags   []string
+	Owners []string
+	IPs    []string
+}
+
+type deviceIdentity struct {
+	Name   string
+	Tags   []string
+	Owners []string
+	IPs    []string
 }
 
 type Config struct {
@@ -105,6 +122,9 @@ func (n *Notifier) targetsFor(evt event.Event) []string {
 		if len(r.Severities) > 0 && !contains(r.Severities, evt.Severity) {
 			continue
 		}
+		if !matchesDeviceSelector(r.Device, evt) {
+			continue
+		}
 		out = append(out, r.Sinks...)
 	}
 	return uniq(out)
@@ -129,6 +149,160 @@ func contains(items []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func matchesDeviceSelector(selector DeviceSelector, evt event.Event) bool {
+	if !hasSelectorFilters(selector) {
+		return true
+	}
+	identity, ok := deviceIdentityFromEvent(evt)
+	if !ok {
+		return false
+	}
+	if len(selector.Names) > 0 && !matchesSelectorString(selector.Names, identity.Name) {
+		return false
+	}
+	if len(selector.Tags) > 0 && !matchesSelectorAny(selector.Tags, identity.Tags) {
+		return false
+	}
+	if len(selector.Owners) > 0 && !matchesSelectorAny(selector.Owners, identity.Owners) {
+		return false
+	}
+	if len(selector.IPs) > 0 && !matchesSelectorAnyIPs(selector.IPs, identity.IPs) {
+		return false
+	}
+	return true
+}
+
+func hasSelectorFilters(selector DeviceSelector) bool {
+	return len(selector.Names) > 0 || len(selector.Tags) > 0 || len(selector.Owners) > 0 || len(selector.IPs) > 0
+}
+
+func matchesSelectorString(selector []string, value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, raw := range selector {
+		if strings.EqualFold(strings.TrimSpace(raw), value) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesSelectorAny(selector []string, values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for _, value := range values {
+		if matchesSelectorString(selector, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesSelectorAnyIPs(selector []string, values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	normalizedValues := make([]string, 0, len(values))
+	for _, raw := range values {
+		ip, err := netip.ParseAddr(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		normalizedValues = append(normalizedValues, ip.String())
+	}
+	if len(normalizedValues) == 0 {
+		return false
+	}
+	for _, raw := range selector {
+		ip, err := netip.ParseAddr(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		if contains(normalizedValues, ip.String()) {
+			return true
+		}
+	}
+	return false
+}
+
+func deviceIdentityFromEvent(evt event.Event) (deviceIdentity, bool) {
+	if evt.SubjectType != event.SubjectPeer {
+		return deviceIdentity{}, false
+	}
+	id := deviceIdentity{
+		Name:   evt.SubjectID,
+		Tags:   []string{},
+		Owners: []string{},
+		IPs:    []string{},
+	}
+	if evt.Payload == nil {
+		return id, true
+	}
+	if rawName, ok := evt.Payload["name"]; ok {
+		if name, ok := rawName.(string); ok && strings.TrimSpace(name) != "" {
+			id.Name = strings.TrimSpace(name)
+		}
+	}
+	id.Tags = payloadStringSlice(evt.Payload, "tags")
+	id.Owners = payloadStringSlice(evt.Payload, "owners")
+	id.IPs = payloadIPSlice(evt.Payload, "ips")
+	return id, true
+}
+
+func payloadStringSlice(payload map[string]any, key string) []string {
+	raw, ok := payload[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			out = append(out, s)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func payloadIPSlice(payload map[string]any, key string) []string {
+	values := payloadStringSlice(payload, key)
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		ip, err := netip.ParseAddr(value)
+		if err != nil {
+			continue
+		}
+		out = append(out, ip.String())
+	}
+	return out
 }
 
 func uniq(items []string) []string {

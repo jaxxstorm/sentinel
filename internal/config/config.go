@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,9 +51,17 @@ type NotifierConfig struct {
 }
 
 type RouteConfig struct {
-	EventTypes []string `mapstructure:"event_types" json:"event_types"`
-	Severities []string `mapstructure:"severities" json:"severities"`
-	Sinks      []string `mapstructure:"sinks" json:"sinks"`
+	EventTypes []string             `mapstructure:"event_types" json:"event_types"`
+	Severities []string             `mapstructure:"severities" json:"severities"`
+	Sinks      []string             `mapstructure:"sinks" json:"sinks"`
+	Device     DeviceSelectorConfig `mapstructure:"device" json:"device"`
+}
+
+type DeviceSelectorConfig struct {
+	Names  []string `mapstructure:"names" json:"names"`
+	Tags   []string `mapstructure:"tags" json:"tags"`
+	Owners []string `mapstructure:"owners" json:"owners"`
+	IPs    []string `mapstructure:"ips" json:"ips"`
 }
 
 type SinkConfig struct {
@@ -154,6 +163,19 @@ func Default() Config {
 }
 
 func Load(path string) (Config, error) {
+	restoreEnv := suppressWhitespaceOnlyEnv(
+		envVarDetectors,
+		envVarDetectorOrder,
+		envVarNotifierSinks,
+		envVarNotifierRoutes,
+		envVarTSNetTags,
+		envVarTSNetClientSecret,
+		envVarTSNetClientID,
+		envVarTSNetIDToken,
+		envVarTSNetAudience,
+	)
+	defer restoreEnv()
+
 	cfg := Default()
 	v := viper.New()
 	v.SetEnvPrefix("SENTINEL")
@@ -290,6 +312,30 @@ func lookupNonEmptyEnv(key string) (string, bool) {
 		return "", false
 	}
 	return raw, true
+}
+
+func suppressWhitespaceOnlyEnv(keys ...string) func() {
+	restores := make([]func(), 0, len(keys))
+	for _, key := range keys {
+		raw, ok := os.LookupEnv(key)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(raw) != "" {
+			continue
+		}
+		_ = os.Unsetenv(key)
+		k := key
+		v := raw
+		restores = append(restores, func() {
+			_ = os.Setenv(k, v)
+		})
+	}
+	return func() {
+		for i := len(restores) - 1; i >= 0; i-- {
+			restores[i]()
+		}
+	}
 }
 
 func parseStringListEnv(key, raw string) ([]string, error) {
@@ -467,6 +513,9 @@ func Validate(cfg Config) error {
 				return fmt.Errorf("notifier.routes[%d].event_types[%d] has unknown value %q", i, j, et)
 			}
 		}
+		if err := validateDeviceSelector(i, &route.Device); err != nil {
+			return err
+		}
 	}
 	for i, sink := range cfg.Notifier.Sinks {
 		sinkType := strings.ToLower(strings.TrimSpace(sink.Type))
@@ -477,6 +526,40 @@ func Validate(cfg Config) error {
 		}
 		if sinkType == "discord" && strings.TrimSpace(sink.URL) == "" {
 			return fmt.Errorf("notifier.sinks[%d].url is required for discord sink", i)
+		}
+	}
+	return nil
+}
+
+func validateDeviceSelector(routeIndex int, selector *DeviceSelectorConfig) error {
+	if selector == nil {
+		return nil
+	}
+	if err := validateNonEmptySelectorValues(routeIndex, "names", selector.Names); err != nil {
+		return err
+	}
+	if err := validateNonEmptySelectorValues(routeIndex, "tags", selector.Tags); err != nil {
+		return err
+	}
+	if err := validateNonEmptySelectorValues(routeIndex, "owners", selector.Owners); err != nil {
+		return err
+	}
+	for j, raw := range selector.IPs {
+		ip := strings.TrimSpace(raw)
+		if ip == "" {
+			return fmt.Errorf("notifier.routes[%d].device.ips[%d] must not be empty", routeIndex, j)
+		}
+		if _, err := netip.ParseAddr(ip); err != nil {
+			return fmt.Errorf("notifier.routes[%d].device.ips[%d] must be a valid IP address", routeIndex, j)
+		}
+	}
+	return nil
+}
+
+func validateNonEmptySelectorValues(routeIndex int, field string, values []string) error {
+	for j, raw := range values {
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("notifier.routes[%d].device.%s[%d] must not be empty", routeIndex, field, j)
 		}
 	}
 	return nil

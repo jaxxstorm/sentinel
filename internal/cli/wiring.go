@@ -181,7 +181,17 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 			sentinelLogger.Warn("route has no available sinks; falling back to stdout-debug", zap.Strings("event_types", r.EventTypes))
 			validSinks = []string{defaultSinkName}
 		}
-		routes = append(routes, notify.Route{EventTypes: r.EventTypes, Severities: r.Severities, Sinks: validSinks})
+		routes = append(routes, notify.Route{
+			EventTypes: r.EventTypes,
+			Severities: r.Severities,
+			Sinks:      validSinks,
+			Device: notify.DeviceSelector{
+				Names:  r.Device.Names,
+				Tags:   r.Device.Tags,
+				Owners: r.Device.Owners,
+				IPs:    r.Device.IPs,
+			},
+		})
 	}
 	if len(routes) == 0 {
 		sentinelLogger.Info("adding default notifier route to stdout-debug")

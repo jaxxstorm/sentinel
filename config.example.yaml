@@ -66,12 +66,23 @@ notifier:
     # Use "*" to match all emitted event types.
     - event_types: ["*"]
       severities: []
+      device:
+        # Optional selectors. Omit `device` to match all devices.
+        names: ["sentinel"]
+        tags: ["tag:dev"]
+        owners: ["123"]
+        ips: ["100.64.0.10"]
       sinks: ["stdout-debug", "discord-primary"]
       # sinks: ["stdout-debug", "webhook-primary", "discord-primary"]
 
     # Example explicit route:
     # - event_types: ["peer.online", "peer.offline", "peer.routes.changed", "daemon.state.changed"]
     #   severities: []
+    #   device:
+    #     names: ["laptop-01"]
+    #     tags: ["tag:prod"]
+    #     owners: ["456"]
+    #     ips: ["100.64.0.25"]
     #   sinks: ["stdout-debug"]
 
 state:

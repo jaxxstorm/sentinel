@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,6 +123,8 @@ func decodeNetmapFromStatusJSON(data []byte) (Netmap, error) {
 			Name:              firstNonEmpty(stringVal(peer, "HostName"), hostFromDNSName(stringVal(peer, "DNSName"))),
 			Online:            boolVal(peer, "Online"),
 			Tags:              sortedCopy(stringSliceVal(peer, "Tags")),
+			Owners:            normalizeIdentityValues([]string{anyToString(peer["UserID"])}),
+			IPs:               extractIdentityIPs(peer, "TailscaleIPs", "Addresses"),
 			Routes:            sortedCopy(stringSliceVal(peer, "PrimaryRoutes")),
 			MachineAuthorized: boolVal(peer, "MachineAuthorized"),
 			Expired:           boolVal(peer, "Expired"),
@@ -181,6 +184,8 @@ func decodeNetMapJSON(data []byte) (Netmap, error) {
 			Name:              firstNonEmpty(stringVal(node, "ComputedName"), hostFromDNSName(stringVal(node, "Name"))),
 			Online:            boolVal(node, "Online"),
 			Tags:              sortedCopy(stringSliceVal(node, "Tags")),
+			Owners:            normalizeIdentityValues([]string{anyToString(node["User"])}),
+			IPs:               extractIdentityIPs(node, "Addresses", "TailscaleIPs"),
 			Routes:            sortedCopy(stringSliceVal(node, "PrimaryRoutes")),
 			MachineAuthorized: boolVal(node, "MachineAuthorized"),
 			Expired:           boolVal(node, "Expired"),
@@ -325,4 +330,72 @@ func stableMapHash(m map[string]any) string {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:8])
+}
+
+func extractIdentityIPs(m map[string]any, keys ...string) []string {
+	values := make([]string, 0)
+	for _, key := range keys {
+		values = append(values, stringSliceVal(m, key)...)
+	}
+	return normalizeIdentityIPs(values)
+}
+
+func normalizeIdentityIPs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if ip, err := netip.ParseAddr(value); err == nil {
+			canonical := ip.String()
+			if _, ok := seen[canonical]; ok {
+				continue
+			}
+			seen[canonical] = struct{}{}
+			out = append(out, canonical)
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(value); err == nil {
+			canonical := prefix.Addr().String()
+			if _, ok := seen[canonical]; ok {
+				continue
+			}
+			seen[canonical] = struct{}{}
+			out = append(out, canonical)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeIdentityValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
 }

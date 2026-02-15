@@ -21,6 +21,8 @@ func TestPeerChangeDetectorEmitsMembershipAndAttributeEvents(t *testing.T) {
 				Name:              "peer-1",
 				Online:            true,
 				Tags:              []string{"tag:dev"},
+				Owners:            []string{"7"},
+				IPs:               []string{"100.64.0.10"},
 				Routes:            []string{"10.0.0.0/24"},
 				MachineAuthorized: false,
 				KeyExpiry:         "2026-02-20T00:00:00Z",
@@ -38,6 +40,8 @@ func TestPeerChangeDetectorEmitsMembershipAndAttributeEvents(t *testing.T) {
 				Name:              "peer-1",
 				Online:            true,
 				Tags:              []string{"tag:prod"},
+				Owners:            []string{"7"},
+				IPs:               []string{"100.64.0.11"},
 				Routes:            []string{"10.1.0.0/24"},
 				MachineAuthorized: true,
 				KeyExpiry:         "2026-03-01T00:00:00Z",
@@ -55,6 +59,7 @@ func TestPeerChangeDetectorEmitsMembershipAndAttributeEvents(t *testing.T) {
 	got := map[string]bool{}
 	for _, e := range events {
 		got[e.EventType] = true
+		assertPeerIdentityPayload(t, e.Payload)
 	}
 	expected := []string{
 		event.TypePeerAdded,
@@ -82,6 +87,8 @@ func TestPeerChangeDetectorUnchangedEmitsNone(t *testing.T) {
 			Name:              "peer-1",
 			Online:            true,
 			Tags:              []string{"tag:dev"},
+			Owners:            []string{"7"},
+			IPs:               []string{"100.64.0.10"},
 			Routes:            []string{"10.0.0.0/24"},
 			MachineAuthorized: true,
 			KeyExpiry:         "2026-02-20T00:00:00Z",
@@ -98,5 +105,17 @@ func TestPeerChangeDetectorUnchangedEmitsNone(t *testing.T) {
 	}
 	if len(events) != 0 {
 		t.Fatalf("expected no events, got %#v", events)
+	}
+}
+
+func assertPeerIdentityPayload(t *testing.T, payload map[string]any) {
+	t.Helper()
+	if payload == nil {
+		t.Fatal("expected payload")
+	}
+	for _, key := range []string{"name", "tags", "owners", "ips"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("expected payload key %q, got %#v", key, payload)
+		}
 	}
 }

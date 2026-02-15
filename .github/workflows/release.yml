@@ -55,9 +55,11 @@ jobs:
           end_epoch=$(date +%s)
           elapsed=$((end_epoch - JOB_START_EPOCH))
           target=600
-          echo "### goreleaser release duration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- elapsed: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
-          echo "- target: <= ${target}s" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### goreleaser release duration"
+            echo "- elapsed: ${elapsed}s"
+            echo "- target: <= ${target}s"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$elapsed" -gt "$target" ]; then
             echo "::warning::release job exceeded target (${elapsed}s > ${target}s)"
           fi

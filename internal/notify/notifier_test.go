@@ -157,6 +157,118 @@ func TestNotifierMixedWildcardAndLiteralStillMatchesAll(t *testing.T) {
 	}
 }
 
+func TestNotifierDeviceNameSelectorMatches(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-device-name"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-device-name"},
+			Device: DeviceSelector{
+				Names: []string{"nas-01"},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", map[string]any{
+		"name":   "nas-01",
+		"tags":   []string{"tag:prod"},
+		"owners": []string{"123"},
+		"ips":    []string{"100.64.0.10"},
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected device name selector to match once, got %d", sink.sends)
+	}
+}
+
+func TestNotifierDeviceSelectorsRequireAllConfiguredDimensions(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-device-and"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-device-and"},
+			Device: DeviceSelector{
+				Names: []string{"nas-01"},
+				Tags:  []string{"tag:prod"},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", map[string]any{
+		"name":   "nas-01",
+		"tags":   []string{"tag:dev"},
+		"owners": []string{"123"},
+		"ips":    []string{"100.64.0.10"},
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 0 {
+		t.Fatalf("expected selector AND semantics to reject non-matching tag, got %d sends", sink.sends)
+	}
+}
+
+func TestNotifierDeviceOwnerAndIPSelectorsMatch(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-device-owner-ip"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-device-owner-ip"},
+			Device: DeviceSelector{
+				Owners: []string{"123"},
+				IPs:    []string{"100.64.0.10"},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerRoutesChanged, "peer1", "before", "after", map[string]any{
+		"name":   "node-a",
+		"tags":   []string{"tag:prod"},
+		"owners": []string{"123"},
+		"ips":    []string{"100.64.0.10"},
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected owner+ip selectors to match once, got %d", sink.sends)
+	}
+}
+
+func TestNotifierDeviceSelectorSkipsNonPeerEvent(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-device-non-peer"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-device-non-peer"},
+			Device: DeviceSelector{
+				Names: []string{"nas-01"},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewDaemonEvent(event.TypeDaemonStateChanged, "local", "before", "after", map[string]any{
+		"before_state": "Starting",
+		"after_state":  "Running",
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 0 {
+		t.Fatalf("expected non-peer event to skip device selector route, got %d sends", sink.sends)
+	}
+}
+
 func TestNotifierRoutesEventToDiscordSink(t *testing.T) {
 	requests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -27,7 +27,7 @@ func (d *PresenceDetector) Detect(_ context.Context, before, after snapshot.Snap
 		old, exists := prev[id]
 		if !exists {
 			if p.Online {
-				result = append(result, event.NewPresenceEvent(event.TypePeerOnline, id, before.Hash, after.Hash, map[string]any{"name": p.Name}, d.now()))
+				result = append(result, event.NewPresenceEvent(event.TypePeerOnline, id, before.Hash, after.Hash, deviceIdentityPayload(p), d.now()))
 			}
 			continue
 		}
@@ -38,7 +38,7 @@ func (d *PresenceDetector) Detect(_ context.Context, before, after snapshot.Snap
 		if p.Online {
 			eventType = event.TypePeerOnline
 		}
-		result = append(result, event.NewPresenceEvent(eventType, id, before.Hash, after.Hash, map[string]any{"name": p.Name}, d.now()))
+		result = append(result, event.NewPresenceEvent(eventType, id, before.Hash, after.Hash, deviceIdentityPayload(p), d.now()))
 	}
 	for id, old := range prev {
 		if _, exists := next[id]; exists {
@@ -47,7 +47,14 @@ func (d *PresenceDetector) Detect(_ context.Context, before, after snapshot.Snap
 		if !old.Online {
 			continue
 		}
-		result = append(result, event.NewPresenceEvent(event.TypePeerOffline, id, before.Hash, after.Hash, map[string]any{"name": old.Name, "reason": "missing_from_netmap"}, d.now()))
+		result = append(result, event.NewPresenceEvent(
+			event.TypePeerOffline,
+			id,
+			before.Hash,
+			after.Hash,
+			mergePayload(deviceIdentityPayload(old), map[string]any{"reason": "missing_from_netmap"}),
+			d.now(),
+		))
 	}
 	return result, nil
 }

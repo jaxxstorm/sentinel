@@ -15,6 +15,8 @@ type Peer struct {
 	Name              string            `json:"name"`
 	Online            bool              `json:"online"`
 	Tags              []string          `json:"tags,omitempty"`
+	Owners            []string          `json:"owners,omitempty"`
+	IPs               []string          `json:"ips,omitempty"`
 	Routes            []string          `json:"routes,omitempty"`
 	MachineAuthorized bool              `json:"machine_authorized,omitempty"`
 	Expired           bool              `json:"expired,omitempty"`
@@ -50,6 +52,10 @@ func Normalize(nm source.Netmap, now time.Time) Snapshot {
 	for _, p := range nm.Peers {
 		tags := append([]string(nil), p.Tags...)
 		sort.Strings(tags)
+		owners := append([]string(nil), p.Owners...)
+		sort.Strings(owners)
+		ips := append([]string(nil), p.IPs...)
+		sort.Strings(ips)
 		routes := append([]string(nil), p.Routes...)
 		sort.Strings(routes)
 		peers = append(peers, Peer{
@@ -57,6 +63,8 @@ func Normalize(nm source.Netmap, now time.Time) Snapshot {
 			Name:              p.Name,
 			Online:            p.Online,
 			Tags:              tags,
+			Owners:            owners,
+			IPs:               ips,
 			Routes:            routes,
 			MachineAuthorized: p.MachineAuthorized,
 			Expired:           p.Expired,
