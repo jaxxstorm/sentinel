@@ -6,6 +6,9 @@ Sentinel ships a Compose-first deployment model:
 - `docker-compose.local.yml`: local development overlay that builds Sentinel from source.
 - `.env.example`: complete runtime variable template with required vs optional guidance.
 
+If you are choosing between release binary, Docker, and source run paths, start with [Getting Started](getting-started.md).
+For release artifact details and tagging behavior, see [Release Artifacts](release-artifacts.md).
+
 ## Quick Start (Local)
 
 1. Copy environment template:

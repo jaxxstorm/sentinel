@@ -101,19 +101,19 @@ Current event families include:
 Use `test-notify --dry-run` to validate route matching without external delivery:
 
 ```bash
-go run ./cmd/sentinel test-notify --config ./config.example.yaml --dry-run
+sentinel test-notify --config ./config.example.yaml --dry-run
 ```
 
 Use normal `test-notify` to validate actual webhook delivery:
 
 ```bash
 REQUESTBIN_WEBHOOK_URL="https://your-endpoint" \
-go run ./cmd/sentinel test-notify --config ./config.example.yaml
+sentinel test-notify --config ./config.example.yaml
 ```
 
 To validate Discord delivery, point a Discord sink URL at your webhook:
 
 ```bash
 SENTINEL_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..." \
-go run ./cmd/sentinel run --config ./config.example.yaml --log-level debug
+sentinel run --config ./config.example.yaml --log-level debug
 ```

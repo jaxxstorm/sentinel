@@ -184,7 +184,7 @@ SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
 SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
 SENTINEL_NOTIFIER_SINKS='[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"${SENTINEL_DISCORD_WEBHOOK_URL}"}]' \
 SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"names":["sentinel"],"tags":["tag:dev"],"owners":["123"],"ips":["100.64.0.10"]},"sinks":["stdout-debug","discord-primary"]}]' \
-go run ./cmd/sentinel validate-config
+sentinel validate-config
 ```
 
 ## Routing Examples (JSON + Env)

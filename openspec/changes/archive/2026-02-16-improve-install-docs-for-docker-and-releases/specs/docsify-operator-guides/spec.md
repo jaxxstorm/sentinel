@@ -1,15 +1,4 @@
-# docsify-operator-guides Specification
-
-## Purpose
-Defines operator documentation requirements for Sentinel using a Docsify-renderable docs site and a concise root README.
-
-## Requirements
-### Requirement: Sentinel SHALL provide Docsify-renderable operator documentation
-Sentinel SHALL provide a documentation site under `docs/` that can be rendered by Docsify without additional conversion steps.
-
-#### Scenario: Docsify entrypoint is present
-- **WHEN** an operator serves the repository with Docsify tooling
-- **THEN** the `docs/` content renders a navigable documentation site
+## MODIFIED Requirements
 
 ### Requirement: Sentinel SHALL document configuration format comprehensively
 Sentinel documentation SHALL describe the configuration schema, defaults, sink and route configuration, and environment-variable interpolation behavior used at runtime, including `stdout/debug`, webhook, and Discord sink examples, SHALL include complete environment-only configuration guidance for container deployments, SHALL include a Docker Compose plus Railway template environment variable matrix that identifies required and optional variables, and SHALL present operator-oriented command examples using installed binary and Docker workflows while keeping source-based `go run` examples scoped to development guidance.
@@ -44,17 +33,6 @@ Sentinel documentation SHALL describe how release binaries and Docker images are
 #### Scenario: Operator can install Sentinel from GitHub Releases
 - **WHEN** an operator follows installation instructions in docs
 - **THEN** the operator can download the correct release asset for their platform, extract it, and run `sentinel version`
-
-### Requirement: Sentinel SHALL provide operator troubleshooting guidance
-Sentinel documentation SHALL include practical troubleshooting guidance for common runtime issues including missing webhook deliveries, idempotency suppression, sink connectivity failures, and malformed environment-sourced config values.
-
-#### Scenario: Webhook troubleshooting flow is documented
-- **WHEN** an operator observes sink output without webhook delivery
-- **THEN** docs provide concrete checks for endpoint health, runtime logs, retries, and idempotency state
-
-#### Scenario: Env config troubleshooting flow is documented
-- **WHEN** an operator provides invalid structured env configuration
-- **THEN** docs provide concrete checks for env key naming, expected structure, parse failures, and validation errors
 
 ### Requirement: Sentinel SHALL maintain a concise repository README
 Sentinel SHALL provide a root `README.md` that gives a concise overview, installation and quick-start pathways for release binary and Docker usage, development-specific source-run guidance, and links to detailed Docsify documentation in plain technical style.

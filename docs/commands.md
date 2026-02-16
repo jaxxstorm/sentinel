@@ -1,5 +1,8 @@
 # Command Reference
 
+Examples in this page use the installed `sentinel` binary.
+For source-based development examples, see the development section in [Getting Started](getting-started.md).
+
 ## Core Commands
 
 - `run`: start continuous observation and notification loop
@@ -27,13 +30,27 @@
 ## Example Invocations
 
 ```bash
-go run ./cmd/sentinel status --config ./config.example.yaml
+sentinel status --config ./config.example.yaml
 ```
 
 ```bash
-go run ./cmd/sentinel run --config ./config.example.yaml --log-format json --log-level debug
+sentinel run --config ./config.example.yaml --log-format json --log-level debug
 ```
 
 ```bash
-go run ./cmd/sentinel diff --config ./config.example.yaml
+sentinel diff --config ./config.example.yaml
+```
+
+```bash
+sentinel test-notify --config ./config.example.yaml --dry-run
+```
+
+## Docker Command Example
+
+```bash
+docker run --rm \
+  -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_CONFIG_PATH=/sentinel/config.yaml \
+  -v "$(pwd)/config.example.yaml:/sentinel/config.yaml:ro" \
+  ghcr.io/jaxxstorm/sentinel:latest status
 ```

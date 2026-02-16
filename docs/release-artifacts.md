@@ -14,20 +14,46 @@ Sentinel publishes binaries and container images from the same semantic version 
 
 GoReleaser is intentionally binary-only in this project. It does not build or publish Docker images.
 
+### Install from GitHub Releases
+
+Operators can install Sentinel directly from release assets:
+
+1. Pick a release tag and platform archive from `https://github.com/jaxxstorm/sentinel/releases`
+2. Download and extract the matching archive
+3. Place `sentinel` on your `PATH`
+4. Verify with `sentinel version`
+
+Linux amd64 example:
+
+```bash
+VERSION=v0.1.0
+
+gh release download "$VERSION" \
+  --repo jaxxstorm/sentinel \
+  --pattern 'sentinel_*_linux_amd64.tar.gz' \
+  --pattern 'checksums.txt'
+
+tar -xzf sentinel_*_linux_amd64.tar.gz sentinel
+install -m 0755 sentinel /usr/local/bin/sentinel
+sentinel version
+```
+
+For run-path selection and first-run commands, see [Getting Started](getting-started.md).
+
 ## Container Releases (GHCR Workflow)
 
 - Workflow: `.github/workflows/publish-image.yml`
 - Trigger:
   - push to `main` (maintains default `latest` track)
   - push tag matching `v*.*.*` (and prerelease `v*.*.*-*`)
-- Registry: `ghcr.io/<owner>/<repo>`
+- Registry: `ghcr.io/jaxxstorm/sentinel`
 - Output tags:
   - on `main`: `latest`, `sha-<fullsha>`
   - on semver tags: `vX.Y.Z`, `vX.Y`, `vX`, `sha-<fullsha>`
 
 The image workflow runs independently from GoReleaser.
 
-The repository compose template defaults to `ghcr.io/<owner>/<repo>:latest`.
+The repository compose template defaults to `ghcr.io/jaxxstorm/sentinel:latest`.
 Pin a version tag if you need immutable deploy inputs.
 
 Runtime configuration for container users, including environment variables, is documented in [`Docker Image`](docker-image.md).
@@ -119,7 +145,7 @@ If build times regress:
    - `Publish Container Image`
 4. Verify outputs:
    - GitHub Release assets present for `v0.1.0`
-   - GHCR image tags published for `ghcr.io/<owner>/<repo>:v0.1.0`
+   - GHCR image tags published for `ghcr.io/jaxxstorm/sentinel:v0.1.0`
 
 ## Common Failure Cases
 

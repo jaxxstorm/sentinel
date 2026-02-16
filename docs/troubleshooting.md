@@ -13,7 +13,7 @@
 
 1. Confirm the Discord sink has `type: discord` and a non-empty webhook URL.
 2. Run config validation and check for sink errors:
-   - `go run ./cmd/sentinel validate-config --config ./config.example.yaml`
+   - `sentinel validate-config --config ./config.example.yaml`
 3. Look for sink logs:
    - `discord send succeeded`
    - `discord send failed`
@@ -39,7 +39,7 @@ cat .sentinel/state.json
 Run:
 
 ```bash
-go run ./cmd/sentinel validate-config --config ./config.example.yaml
+sentinel validate-config --config ./config.example.yaml
 ```
 
 Common issues:
@@ -73,7 +73,7 @@ Quick local sanity check:
 ```bash
 SENTINEL_NOTIFIER_SINKS='[{\"name\":\"stdout-debug\",\"type\":\"stdout\"}]' \
 SENTINEL_NOTIFIER_ROUTES='[{\"event_types\":[\"*\"],\"sinks\":[\"stdout-debug\"]}]' \
-go run ./cmd/sentinel validate-config
+sentinel validate-config
 ```
 
 ## Env precedence checks
@@ -120,21 +120,21 @@ To include expanded event families, either:
 ## Local verification workflow
 
 ```bash
-go run ./cmd/sentinel validate-config --config ./config.example.yaml
+sentinel validate-config --config ./config.example.yaml
 ```
 
 ```bash
 REQUESTBIN_WEBHOOK_URL="https://your-endpoint" \
-go run ./cmd/sentinel test-notify --config ./config.example.yaml
+sentinel test-notify --config ./config.example.yaml
 ```
 
 ```bash
-go run ./cmd/sentinel test-notify --config ./config.example.yaml --dry-run
+sentinel test-notify --config ./config.example.yaml --dry-run
 ```
 
 ```bash
 REQUESTBIN_WEBHOOK_URL="https://your-endpoint" \
-go run ./cmd/sentinel run --config ./config.example.yaml --log-level debug
+sentinel run --config ./config.example.yaml --log-level debug
 ```
 
 ## Release workflow failures
@@ -155,7 +155,7 @@ If tagged releases are not publishing artifacts:
 If GHCR images are not publishing:
 
 1. Confirm `Publish Container Image` workflow has `packages: write`.
-2. Confirm image path resolves to `ghcr.io/<owner>/<repo>`.
+2. Confirm image path resolves to `ghcr.io/jaxxstorm/sentinel`.
 3. Validate Docker build locally:
    ```bash
    docker build -t sentinel:dry-run \

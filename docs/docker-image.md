@@ -84,7 +84,7 @@ docker run --rm \
   -e SENTINEL_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... \
   -v "$(pwd)/config.example.yaml:/sentinel/config.yaml:ro" \
   -v "$(pwd)/.sentinel:/var/lib/sentinel" \
-  ghcr.io/<owner>/<repo>:latest run
+  ghcr.io/jaxxstorm/sentinel:latest run
 ```
 
 If you mount state at `/var/lib/sentinel`, set:
@@ -111,5 +111,5 @@ docker run --rm \
   -e SENTINEL_NOTIFIER_SINKS='[{\"name\":\"stdout-debug\",\"type\":\"stdout\"},{\"name\":\"discord-primary\",\"type\":\"discord\",\"url\":\"${SENTINEL_DISCORD_WEBHOOK_URL}\"}]' \
   -e SENTINEL_NOTIFIER_ROUTES='[{\"event_types\":[\"*\"],\"sinks\":[\"stdout-debug\",\"discord-primary\"]}]' \
   -v "$(pwd)/.sentinel:/var/lib/sentinel" \
-  ghcr.io/<owner>/<repo>:latest run
+  ghcr.io/jaxxstorm/sentinel:latest run
 ```
