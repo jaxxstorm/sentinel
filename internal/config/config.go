@@ -82,6 +82,8 @@ type OutputConfig struct {
 }
 
 type TSNetConfig struct {
+	RuntimeMode              string        `mapstructure:"runtime_mode" json:"runtime_mode"`
+	LocalAPISocket           string        `mapstructure:"localapi_socket" json:"localapi_socket"`
 	Hostname                 string        `mapstructure:"hostname" json:"hostname"`
 	StateDir                 string        `mapstructure:"state_dir" json:"state_dir"`
 	AuthKey                  string        `mapstructure:"auth_key" json:"auth_key"`
@@ -153,6 +155,8 @@ func Default() Config {
 		},
 		Output: OutputConfig{LogFormat: "pretty", LogLevel: "info", NoColor: false},
 		TSNet: TSNetConfig{
+			RuntimeMode:              "embedded",
+			LocalAPISocket:           "/var/run/tailscale/tailscaled.sock",
 			Hostname:                 "sentinel",
 			StateDir:                 ".sentinel/tsnet",
 			LoginMode:                "auto",
@@ -213,6 +217,8 @@ func Load(path string) (Config, error) {
 	v.SetDefault("output.log_format", cfg.Output.LogFormat)
 	v.SetDefault("output.log_level", cfg.Output.LogLevel)
 	v.SetDefault("state.path", cfg.State.Path)
+	v.SetDefault("tsnet.runtime_mode", cfg.TSNet.RuntimeMode)
+	v.SetDefault("tsnet.localapi_socket", cfg.TSNet.LocalAPISocket)
 	v.SetDefault("tsnet.hostname", cfg.TSNet.Hostname)
 	v.SetDefault("tsnet.state_dir", cfg.TSNet.StateDir)
 	v.SetDefault("tsnet.login_mode", cfg.TSNet.LoginMode)
@@ -400,6 +406,14 @@ func applySensibleDefaults(cfg *Config) {
 	if cfg.TSNet.Hostname == "" {
 		cfg.TSNet.Hostname = def.TSNet.Hostname
 	}
+	cfg.TSNet.RuntimeMode = strings.ToLower(strings.TrimSpace(cfg.TSNet.RuntimeMode))
+	if cfg.TSNet.RuntimeMode == "" {
+		cfg.TSNet.RuntimeMode = def.TSNet.RuntimeMode
+	}
+	cfg.TSNet.LocalAPISocket = strings.TrimSpace(cfg.TSNet.LocalAPISocket)
+	if cfg.TSNet.LocalAPISocket == "" {
+		cfg.TSNet.LocalAPISocket = def.TSNet.LocalAPISocket
+	}
 	cfg.TSNet.StateDir = strings.TrimSpace(cfg.TSNet.StateDir)
 	if cfg.TSNet.StateDir == "" {
 		cfg.TSNet.StateDir = def.TSNet.StateDir
@@ -455,8 +469,20 @@ func Validate(cfg Config) error {
 	if !strings.EqualFold(cfg.Output.LogFormat, "pretty") && !strings.EqualFold(cfg.Output.LogFormat, "json") {
 		return fmt.Errorf("output.log_format must be pretty or json")
 	}
-	if cfg.TSNet.StateDir == "" {
-		return fmt.Errorf("tsnet.state_dir is required")
+	runtimeMode := strings.ToLower(strings.TrimSpace(cfg.TSNet.RuntimeMode))
+	switch runtimeMode {
+	case "", "embedded", "localapi":
+	default:
+		return fmt.Errorf("tsnet.runtime_mode must be embedded or localapi")
+	}
+	if runtimeMode == "localapi" {
+		if strings.TrimSpace(cfg.TSNet.LocalAPISocket) == "" {
+			return fmt.Errorf("tsnet.localapi_socket is required for localapi runtime mode")
+		}
+	} else {
+		if cfg.TSNet.StateDir == "" {
+			return fmt.Errorf("tsnet.state_dir is required")
+		}
 	}
 	mode := strings.ToLower(strings.TrimSpace(cfg.TSNet.LoginMode))
 	switch mode {
@@ -467,15 +493,17 @@ func Validate(cfg Config) error {
 	if cfg.TSNet.LoginTimeout <= 0 {
 		return fmt.Errorf("tsnet.login_timeout must be > 0")
 	}
-	for i, rawTag := range cfg.TSNet.AdvertiseTags {
-		tag := strings.TrimSpace(rawTag)
-		if tag == "" {
-			return fmt.Errorf("tsnet.advertise_tags[%d] must not be empty", i)
+	if runtimeMode != "localapi" {
+		for i, rawTag := range cfg.TSNet.AdvertiseTags {
+			tag := strings.TrimSpace(rawTag)
+			if tag == "" {
+				return fmt.Errorf("tsnet.advertise_tags[%d] must not be empty", i)
+			}
+			if !advertiseTagPattern.MatchString(tag) {
+				return fmt.Errorf("tsnet.advertise_tags[%d] must match tag:<name> format", i)
+			}
+			cfg.TSNet.AdvertiseTags[i] = tag
 		}
-		if !advertiseTagPattern.MatchString(tag) {
-			return fmt.Errorf("tsnet.advertise_tags[%d] must match tag:<name> format", i)
-		}
-		cfg.TSNet.AdvertiseTags[i] = tag
 	}
 	clientSecret := strings.TrimSpace(cfg.TSNet.ClientSecret)
 	clientID := strings.TrimSpace(cfg.TSNet.ClientID)
@@ -485,14 +513,16 @@ func Validate(cfg Config) error {
 	cfg.TSNet.ClientID = clientID
 	cfg.TSNet.IDToken = idToken
 	cfg.TSNet.Audience = audience
-	if mode == "oauth" && clientSecret == "" {
-		return fmt.Errorf("tsnet.client_secret is required for oauth login mode")
-	}
-	if clientSecret == "" && (clientID != "" || idToken != "" || audience != "") {
-		return fmt.Errorf("tsnet.client_secret is required when oauth credential fields are set")
-	}
-	if clientSecret != "" && clientID == "" {
-		return fmt.Errorf("tsnet.client_id is required when tsnet.client_secret is set")
+	if runtimeMode != "localapi" {
+		if mode == "oauth" && clientSecret == "" {
+			return fmt.Errorf("tsnet.client_secret is required for oauth login mode")
+		}
+		if clientSecret == "" && (clientID != "" || idToken != "" || audience != "") {
+			return fmt.Errorf("tsnet.client_secret is required when oauth credential fields are set")
+		}
+		if clientSecret != "" && clientID == "" {
+			return fmt.Errorf("tsnet.client_id is required when tsnet.client_secret is set")
+		}
 	}
 	sourceMode := strings.ToLower(strings.TrimSpace(cfg.Source.Mode))
 	switch sourceMode {

@@ -98,6 +98,11 @@ output:
   no_color: false
 
 tsnet:
+  # embedded (default): run Sentinel as its own tsnet node.
+  # localapi: connect to an existing tailscaled via LocalAPI socket.
+  runtime_mode: embedded
+  # Used only when runtime_mode=localapi.
+  localapi_socket: /var/run/tailscale/tailscaled.sock
   hostname: sentinel
   state_dir: .sentinel/tsnet
   # Optional ACL tags to request during onboarding.

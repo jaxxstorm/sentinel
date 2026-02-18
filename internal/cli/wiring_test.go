@@ -89,6 +89,45 @@ func TestBuildRuntimeUsesPollingSourceWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeUsesLocalAPIRealtimeSourceWhenConfigured(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "sentinel.yaml")
+	cfg := "state:\n  path: " + filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")) + "\n" +
+		"tsnet:\n" +
+		"  runtime_mode: localapi\n" +
+		"  localapi_socket: /var/run/tailscale/tailscaled.sock\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := buildRuntime(&GlobalOptions{ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := deps.source.(*source.LocalAPIRealtimeSource); !ok {
+		t.Fatalf("expected localapi realtime source, got %T", deps.source)
+	}
+}
+
+func TestBuildRuntimeUsesLocalAPIPollingSourceWhenConfigured(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "sentinel.yaml")
+	cfg := "state:\n  path: " + filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")) + "\n" +
+		"source:\n  mode: poll\n" +
+		"tsnet:\n" +
+		"  runtime_mode: localapi\n" +
+		"  localapi_socket: /var/run/tailscale/tailscaled.sock\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := buildRuntime(&GlobalOptions{ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := deps.source.(*source.LocalClientSource); !ok {
+		t.Fatalf("expected localapi polling source, got %T", deps.source)
+	}
+}
+
 func TestBuildRuntimeDeliversEventToDiscordSink(t *testing.T) {
 	requests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
