@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jaxxstorm/sentinel/internal/config"
 	"github.com/jaxxstorm/sentinel/internal/source"
 )
 
@@ -173,5 +174,52 @@ func TestBuildRuntimeResolvesOAuthCredentialsAndTagsFromEnv(t *testing.T) {
 	}
 	if deps.cfg.TSNet.CredentialMode != "oauth" {
 		t.Fatalf("expected oauth credential mode, got %q", deps.cfg.TSNet.CredentialMode)
+	}
+}
+
+func TestRouteFiltersFromConfigMapsLegacySelectors(t *testing.T) {
+	route := config.RouteConfig{
+		Device: config.DeviceSelectorConfig{
+			Names: []string{"legacy-node"},
+			Tags:  []string{"tag:legacy"},
+			IPs:   []string{"100.64.0.10"},
+		},
+	}
+	filters := routeFiltersFromConfig(route)
+	if len(filters.Include.DeviceNames) != 1 || filters.Include.DeviceNames[0] != "legacy-node" {
+		t.Fatalf("expected legacy names to map to include filters, got %#v", filters.Include.DeviceNames)
+	}
+	if len(filters.Include.Tags) != 1 || filters.Include.Tags[0] != "tag:legacy" {
+		t.Fatalf("expected legacy tags to map to include filters, got %#v", filters.Include.Tags)
+	}
+	if len(filters.Include.IPs) != 1 || filters.Include.IPs[0] != "100.64.0.10" {
+		t.Fatalf("expected legacy ips to map to include filters, got %#v", filters.Include.IPs)
+	}
+}
+
+func TestRouteFiltersFromConfigUsesExplicitFiltersWhenConfigured(t *testing.T) {
+	route := config.RouteConfig{
+		Device: config.DeviceSelectorConfig{
+			Names: []string{"legacy-node"},
+		},
+		Filters: config.RouteFilterConfig{
+			Include: config.NotificationFilterConfig{
+				DeviceNames: []string{"new-node"},
+				Events:      []string{"peer.online"},
+			},
+			Exclude: config.NotificationFilterConfig{
+				Events: []string{"peer.offline"},
+			},
+		},
+	}
+	filters := routeFiltersFromConfig(route)
+	if len(filters.Include.DeviceNames) != 1 || filters.Include.DeviceNames[0] != "new-node" {
+		t.Fatalf("expected explicit include filter to be preserved, got %#v", filters.Include.DeviceNames)
+	}
+	if len(filters.Include.Events) != 1 || filters.Include.Events[0] != "peer.online" {
+		t.Fatalf("expected include events to map, got %#v", filters.Include.Events)
+	}
+	if len(filters.Exclude.Events) != 1 || filters.Exclude.Events[0] != "peer.offline" {
+		t.Fatalf("expected exclude events to map, got %#v", filters.Exclude.Events)
 	}
 }

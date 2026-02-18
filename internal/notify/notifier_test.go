@@ -269,6 +269,185 @@ func TestNotifierDeviceSelectorSkipsNonPeerEvent(t *testing.T) {
 	}
 }
 
+func TestNotifierIncludeFiltersMatchTagAndIP(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-include"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-include"},
+			Filters: RouteFilters{
+				Include: NotificationFilter{
+					Tags: []string{"tag:prod"},
+					IPs:  []string{"100.64.0.10"},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", map[string]any{
+		"name": "node-a",
+		"tags": []string{"tag:prod"},
+		"ips":  []string{"100.64.0.10"},
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected include filters to match once, got %d", sink.sends)
+	}
+}
+
+func TestNotifierExcludeFilterTakesPrecedence(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-exclude"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-exclude"},
+			Filters: RouteFilters{
+				Include: NotificationFilter{
+					Tags: []string{"tag:prod"},
+				},
+				Exclude: NotificationFilter{
+					DeviceNames: []string{"*.mullvad.ts.net"},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+
+	mullvad := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", map[string]any{
+		"name": "us-slc-wg-306.mullvad.ts.net",
+		"tags": []string{"tag:prod"},
+		"ips":  []string{"100.64.0.20"},
+	}, time.Now())
+	nonMullvad := event.NewPeerEvent(event.TypePeerOnline, "peer2", "before", "after", map[string]any{
+		"name": "workstation.tail123.ts.net",
+		"tags": []string{"tag:prod"},
+		"ips":  []string{"100.64.0.21"},
+	}, time.Now())
+
+	if _, err := n.Notify(context.Background(), []event.Event{mullvad, nonMullvad}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected only non-mullvad event to be delivered, got %d sends", sink.sends)
+	}
+}
+
+func TestNotifierFilterCIDRMatchesIdentityIP(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-cidr"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-cidr"},
+			Filters: RouteFilters{
+				Include: NotificationFilter{
+					IPs: []string{"100.64.0.0/24"},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", map[string]any{
+		"name": "node-a",
+		"ips":  []string{"100.64.0.10"},
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected CIDR include filter to match once, got %d", sink.sends)
+	}
+}
+
+func TestNotifierFiltersSkipNonPeerEvents(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-non-peer"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-non-peer"},
+			Filters: RouteFilters{
+				Include: NotificationFilter{
+					DeviceNames: []string{"node-a"},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewDaemonEvent(event.TypeDaemonStateChanged, "daemon", "before", "after", map[string]any{
+		"before_state": "starting",
+		"after_state":  "running",
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 0 {
+		t.Fatalf("expected non-peer event to skip filtered route, got %d sends", sink.sends)
+	}
+}
+
+func TestNotifierIncludeEventFilterMatchesDaemonEvent(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-events-include"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-events-include"},
+			Filters: RouteFilters{
+				Include: NotificationFilter{
+					Events: []string{event.TypeDaemonStateChanged},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	evt := event.NewDaemonEvent(event.TypeDaemonStateChanged, "daemon", "before", "after", map[string]any{
+		"before_state": "starting",
+		"after_state":  "running",
+	}, time.Now())
+	if _, err := n.Notify(context.Background(), []event.Event{evt}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected include event filter to match daemon event, got %d sends", sink.sends)
+	}
+}
+
+func TestNotifierExcludeEventFilterSuppressesOnlyMatchingEventTypes(t *testing.T) {
+	store := state.NewFileStore(filepath.Join(t.TempDir(), "state.json"))
+	sink := &fakeSink{name: "sink-filters-events-exclude"}
+	cfg := Config{
+		Routes: []Route{{
+			EventTypes: []string{"*"},
+			Sinks:      []string{"sink-filters-events-exclude"},
+			Filters: RouteFilters{
+				Exclude: NotificationFilter{
+					Events: []string{event.TypePeerOnline},
+				},
+			},
+		}},
+		IdempotencyKeyTTL: time.Hour,
+	}
+	n := New(cfg, store, []Sink{sink})
+	online := event.NewPeerEvent(event.TypePeerOnline, "peer1", "before", "after", nil, time.Now())
+	offline := event.NewPeerEvent(event.TypePeerOffline, "peer1", "before", "after", nil, time.Now().Add(time.Second))
+	if _, err := n.Notify(context.Background(), []event.Event{online, offline}, false); err != nil {
+		t.Fatal(err)
+	}
+	if sink.sends != 1 {
+		t.Fatalf("expected only non-excluded event to be delivered, got %d sends", sink.sends)
+	}
+}
+
 func TestNotifierRoutesEventToDiscordSink(t *testing.T) {
 	requests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

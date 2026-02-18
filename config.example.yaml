@@ -66,23 +66,32 @@ notifier:
     # Use "*" to match all emitted event types.
     - event_types: ["*"]
       severities: []
-      device:
-        # Optional selectors. Omit `device` to match all devices.
-        names: ["sentinel"]
-        tags: ["tag:dev"]
-        owners: ["123"]
-        ips: ["100.64.0.10"]
+      filters:
+        include:
+          # Optional include filters. Omit `filters` to match all devices.
+          events: ["*"]
+          device_names: ["sentinel"]
+          tags: ["tag:dev"]
+          ips: ["100.64.0.10"]
+        exclude:
+          # Optional event suppression alongside identity suppression.
+          events: ["peer.routes.changed", "peer.tags.changed"]
+          # Example noise suppression for shared Mullvad nodes.
+          device_names: ["*.mullvad.ts.net"]
+      # Legacy `device.names|tags|ips` is still accepted and mapped to include filters.
+      # `device.owners` remains supported for owner-based filtering.
       sinks: ["stdout-debug", "discord-primary"]
       # sinks: ["stdout-debug", "webhook-primary", "discord-primary"]
 
     # Example explicit route:
     # - event_types: ["peer.online", "peer.offline", "peer.routes.changed", "daemon.state.changed"]
     #   severities: []
-    #   device:
-    #     names: ["laptop-01"]
-    #     tags: ["tag:prod"]
-    #     owners: ["456"]
-    #     ips: ["100.64.0.25"]
+    #   filters:
+    #     include:
+    #       events: ["peer.online", "peer.offline"]
+    #       device_names: ["laptop-01"]
+    #       tags: ["tag:prod"]
+    #       ips: ["100.64.0.25"]
     #   sinks: ["stdout-debug"]
 
 state:

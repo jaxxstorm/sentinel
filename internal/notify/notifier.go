@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"path"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ type Route struct {
 	Severities []string
 	Sinks      []string
 	Device     DeviceSelector
+	Filters    RouteFilters
 }
 
 type DeviceSelector struct {
@@ -23,6 +25,18 @@ type DeviceSelector struct {
 	Tags   []string
 	Owners []string
 	IPs    []string
+}
+
+type RouteFilters struct {
+	Include NotificationFilter
+	Exclude NotificationFilter
+}
+
+type NotificationFilter struct {
+	DeviceNames []string
+	Tags        []string
+	IPs         []string
+	Events      []string
 }
 
 type deviceIdentity struct {
@@ -122,6 +136,9 @@ func (n *Notifier) targetsFor(evt event.Event) []string {
 		if len(r.Severities) > 0 && !contains(r.Severities, evt.Severity) {
 			continue
 		}
+		if !matchesRouteFilters(r.Filters, evt) {
+			continue
+		}
 		if !matchesDeviceSelector(r.Device, evt) {
 			continue
 		}
@@ -176,6 +193,125 @@ func matchesDeviceSelector(selector DeviceSelector, evt event.Event) bool {
 
 func hasSelectorFilters(selector DeviceSelector) bool {
 	return len(selector.Names) > 0 || len(selector.Tags) > 0 || len(selector.Owners) > 0 || len(selector.IPs) > 0
+}
+
+func matchesRouteFilters(filters RouteFilters, evt event.Event) bool {
+	if !hasNotificationFilters(filters.Include) && !hasNotificationFilters(filters.Exclude) {
+		return true
+	}
+	var (
+		identity   deviceIdentity
+		identityOK bool
+	)
+	if hasIdentityFilters(filters.Include) || hasIdentityFilters(filters.Exclude) {
+		identity, identityOK = deviceIdentityFromEvent(evt)
+		if !identityOK {
+			return false
+		}
+	}
+	if hasNotificationFilters(filters.Include) && !matchesNotificationFilter(filters.Include, evt, identity, identityOK) {
+		return false
+	}
+	if hasNotificationFilters(filters.Exclude) && matchesNotificationFilter(filters.Exclude, evt, identity, identityOK) {
+		return false
+	}
+	return true
+}
+
+func hasNotificationFilters(filter NotificationFilter) bool {
+	return len(filter.DeviceNames) > 0 || len(filter.Tags) > 0 || len(filter.IPs) > 0 || len(filter.Events) > 0
+}
+
+func hasIdentityFilters(filter NotificationFilter) bool {
+	return len(filter.DeviceNames) > 0 || len(filter.Tags) > 0 || len(filter.IPs) > 0
+}
+
+func matchesNotificationFilter(filter NotificationFilter, evt event.Event, identity deviceIdentity, identityOK bool) bool {
+	if len(filter.Events) > 0 && !matchesEventType(filter.Events, evt.EventType) {
+		return false
+	}
+	if hasIdentityFilters(filter) && !identityOK {
+		return false
+	}
+	if len(filter.DeviceNames) > 0 && !matchesFilterDeviceName(filter.DeviceNames, identity.Name) {
+		return false
+	}
+	if len(filter.Tags) > 0 && !matchesSelectorAny(filter.Tags, identity.Tags) {
+		return false
+	}
+	if len(filter.IPs) > 0 && !matchesFilterIPs(filter.IPs, identity.IPs) {
+		return false
+	}
+	return true
+}
+
+func matchesFilterDeviceName(filters []string, value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	valueLower := strings.ToLower(value)
+	for _, raw := range filters {
+		pattern := strings.TrimSpace(raw)
+		if pattern == "" {
+			continue
+		}
+		if strings.ContainsAny(pattern, "*?[") {
+			ok, err := path.Match(strings.ToLower(pattern), valueLower)
+			if err != nil {
+				continue
+			}
+			if ok {
+				return true
+			}
+			continue
+		}
+		if strings.EqualFold(pattern, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesFilterIPs(filters []string, values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	identityIPs := make([]netip.Addr, 0, len(values))
+	for _, raw := range values {
+		addr, err := netip.ParseAddr(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		identityIPs = append(identityIPs, addr)
+	}
+	if len(identityIPs) == 0 {
+		return false
+	}
+	for _, raw := range filters {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if addr, err := netip.ParseAddr(value); err == nil {
+			for _, identityIP := range identityIPs {
+				if identityIP == addr {
+					return true
+				}
+			}
+			continue
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			continue
+		}
+		for _, identityIP := range identityIPs {
+			if prefix.Contains(identityIP) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func matchesSelectorString(selector []string, value string) bool {

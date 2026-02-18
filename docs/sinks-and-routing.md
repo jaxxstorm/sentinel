@@ -62,6 +62,7 @@ Routes match by:
 
 - `event_types` (explicit values or `*` for all event types)
 - optional `severities`
+- optional `filters.include` / `filters.exclude` for `device_names`, `tags`, `ips`, and `events`
 - list of target sink names
 
 Example:
@@ -70,6 +71,13 @@ Example:
 routes:
   - event_types: ["*"]
     severities: []
+    filters:
+      include:
+        events: ["*"]
+        tags: ["tag:prod"]
+      exclude:
+        events: ["peer.routes.changed"]
+        device_names: ["*.mullvad.ts.net"]
     sinks: ["stdout-debug", "webhook-primary", "discord-primary"]
 ```
 

@@ -1,6 +1,7 @@
 services:
   sentinel:
-    image: sentinel:local
+    env_file:
+      - .env
     pull_policy: never
     build:
       context: .

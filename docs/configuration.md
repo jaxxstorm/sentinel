@@ -18,6 +18,7 @@ Precedence is deterministic:
    - `SENTINEL_DETECTOR_ORDER`
    - `SENTINEL_NOTIFIER_SINKS`
    - `SENTINEL_NOTIFIER_ROUTES`
+5. shorthand composite notifier env vars (append behavior, non-JSON)
 
 ## Top-Level Keys
 
@@ -55,15 +56,19 @@ Ordered list of enabled detector names.
   - `discord` sinks require a non-empty webhook URL
 - `routes`: routing rules by event type and severity
   - `event_types` supports explicit values (for example `peer.online`) and wildcard `*` (match all event types)
-  - optional `device` selector narrows peer/device-scoped events:
-    - `device.names`: match by device name
-    - `device.tags`: match when any configured tag is present
-    - `device.owners`: match by stable owner identity values
-    - `device.ips`: match by literal IP addresses
-  - selector semantics are deterministic:
-    - OR within each selector field (`names`, `tags`, `owners`, `ips`)
-    - AND across configured selector fields
-    - routes with `device` selectors do not match non-device events (for example `daemon.state.changed`)
+  - optional `filters` object narrows peer/device-scoped events:
+    - `filters.include.device_names`: match by device name (supports glob patterns like `*.mullvad.ts.net`)
+    - `filters.include.tags`: match when any configured tag is present
+    - `filters.include.ips`: match by literal IP or CIDR
+    - `filters.include.events`: match specific event types (supports `*`)
+    - `filters.exclude.device_names`, `filters.exclude.tags`, `filters.exclude.ips`, `filters.exclude.events`: suppress matching events
+  - filter semantics are deterministic:
+    - OR within each field list
+    - AND across configured fields in each include/exclude block
+    - exclude match takes precedence over include match
+    - routes with filters do not match non-device events (for example `daemon.state.changed`)
+  - legacy `device.names`, `device.tags`, and `device.ips` fields are still accepted and mapped to include filters for compatibility
+  - legacy `device.owners` remains supported for owner-based filtering
 
 ### `state`
 - `path`: state file path
@@ -136,6 +141,37 @@ see [Docker Compose and Railway](docker-compose.md).
 
 If a structured env key is malformed or empty, Sentinel fails startup with an error that includes the env key name.
 
+### Shorthand composite overrides (non-JSON, append behavior)
+
+For notifier sinks/routes, Sentinel also supports non-JSON env vars. These **append** entries to config/default routes and sinks rather than replacing the entire list.
+
+| Env var | Value format | Effect |
+| --- | --- | --- |
+| `SENTINEL_NOTIFIER_SINK_NAME` | string | appends one sink definition (`name`) |
+| `SENTINEL_NOTIFIER_SINK_TYPE` | string | appends one sink definition (`type`) |
+| `SENTINEL_NOTIFIER_SINK_URL` | string | appends one sink definition (`url`) |
+| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` | comma list | appends one route (`event_types`) |
+| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` | comma list | appends one route (`event_types`) |
+| `SENTINEL_NOTIFIER_ROUTE_SEVERITIES` | comma list | appends one route (`severities`) |
+| `SENTINEL_NOTIFIER_SINK` | comma list | appends one route (`sinks`) |
+| `SENTINEL_NOTIFIER_ROUTE_SINKS` | comma list | appends one route (`sinks`) |
+| `SENTINEL_NOTIFIER_ROUTE_DEVICE_NAMES` | comma list | appends one route (`device.names`) |
+| `SENTINEL_NOTIFIER_ROUTE_DEVICE_TAGS` | comma list | appends one route (`device.tags`) |
+| `SENTINEL_NOTIFIER_ROUTE_DEVICE_OWNERS` | comma list | appends one route (`device.owners`) |
+| `SENTINEL_NOTIFIER_ROUTE_DEVICE_IPS` | comma list | appends one route (`device.ips`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_DEVICE_NAMES` | comma list | appends one route (`filters.include.device_names`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_TAGS` | comma list | appends one route (`filters.include.tags`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_IPS` | comma list | appends one route (`filters.include.ips`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_EVENTS` | comma list | appends one route (`filters.include.events`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_DEVICE_NAMES` | comma list | appends one route (`filters.exclude.device_names`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_TAGS` | comma list | appends one route (`filters.exclude.tags`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_IPS` | comma list | appends one route (`filters.exclude.ips`) |
+| `SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_EVENTS` | comma list | appends one route (`filters.exclude.events`) |
+
+Notes:
+- Scalar fields (for example `SENTINEL_POLL_INTERVAL`, `SENTINEL_TSNET_HOSTNAME`) are already settable directly without JSON.
+- Use structured JSON env vars when you want full replacement control for complete sink/route arrays.
+
 ### Tailscale auth key precedence
 
 Sentinel resolves the onboarding auth key in this order:
@@ -182,8 +218,15 @@ SENTINEL_TSNET_STATE_DIR=.sentinel/tsnet \
 SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
 SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
 SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
-SENTINEL_NOTIFIER_SINKS='[{"name":"stdout-debug","type":"stdout"},{"name":"discord-primary","type":"discord","url":"${SENTINEL_DISCORD_WEBHOOK_URL}"}]' \
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"names":["sentinel"],"tags":["tag:dev"],"owners":["123"],"ips":["100.64.0.10"]},"sinks":["stdout-debug","discord-primary"]}]' \
+SENTINEL_NOTIFIER_SINK_NAME=discord-primary \
+SENTINEL_NOTIFIER_SINK_TYPE=discord \
+SENTINEL_NOTIFIER_SINK_URL='${SENTINEL_DISCORD_WEBHOOK_URL}' \
+SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE='*' \
+SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_EVENTS='*' \
+SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_DEVICE_NAMES='sentinel' \
+SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_TAGS='tag:dev' \
+SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_IPS='100.64.0.10' \
+SENTINEL_NOTIFIER_SINK='stdout-debug,discord-primary' \
 sentinel validate-config
 ```
 
@@ -193,9 +236,31 @@ All examples below assume sink names already exist under `notifier.sinks`.
 
 Tips:
 - `SENTINEL_NOTIFIER_ROUTES` must be a JSON array.
-- `device` selectors are optional. If omitted, routing is based on `event_types`/`severities` only.
-- Selector behavior is OR within a field and AND across fields.
-- `device.owners` matches stable owner identity values (for example user IDs).
+- `filters` are optional. If omitted, routing is based on `event_types`/`severities` only.
+- Include/exclude behavior is OR within a field and AND across configured fields; exclude takes precedence.
+- `filters.include.device_names` supports glob patterns (for example `*.mullvad.ts.net`).
+- `filters.include.events` / `filters.exclude.events` support explicit event types and `*`.
+- Legacy `device.names`, `device.tags`, and `device.ips` are accepted as compatibility aliases for include filters.
+
+### Event Type Reference (all emitted event types)
+
+- `peer.online`
+- `peer.offline`
+- `peer.added`
+- `peer.removed`
+- `peer.routes.changed`
+- `peer.tags.changed`
+- `peer.machine_authorized.changed`
+- `peer.key_expiry.changed`
+- `peer.key_expired`
+- `peer.hostinfo.changed`
+- `daemon.state.changed`
+- `prefs.advertise_routes.changed`
+- `prefs.exit_node.changed`
+- `prefs.run_ssh.changed`
+- `prefs.shields_up.changed`
+- `tailnet.domain.changed`
+- `tailnet.tka_enabled.changed`
 
 ### 1) Only route notifications for devices with tag `tag:foo`
 
@@ -207,8 +272,10 @@ JSON file snippet (`sentinel.json`):
     "routes": [
       {
         "event_types": ["*"],
-        "device": {
-          "tags": ["tag:foo"]
+        "filters": {
+          "include": {
+            "tags": ["tag:foo"]
+          }
         },
         "sinks": ["discord-primary"]
       }
@@ -220,7 +287,7 @@ JSON file snippet (`sentinel.json`):
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"tags":["tag:foo"]},"sinks":["discord-primary"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"filters":{"include":{"tags":["tag:foo"]}},"sinks":["discord-primary"]}]'
 ```
 
 ### 2) Only route `peer.online` events for devices with tag `tag:foo`
@@ -233,8 +300,10 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["peer.online"],
-        "device": {
-          "tags": ["tag:foo"]
+        "filters": {
+          "include": {
+            "tags": ["tag:foo"]
+          }
         },
         "sinks": ["discord-primary"]
       }
@@ -246,7 +315,7 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"tags":["tag:foo"]},"sinks":["discord-primary"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"filters":{"include":{"tags":["tag:foo"]}},"sinks":["discord-primary"]}]'
 ```
 
 ### 3) Only route online/offline events for one device name
@@ -259,8 +328,10 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["peer.online", "peer.offline"],
-        "device": {
-          "names": ["laptop-01"]
+        "filters": {
+          "include": {
+            "device_names": ["laptop-01"]
+          }
         },
         "sinks": ["stdout-debug"]
       }
@@ -272,10 +343,10 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online","peer.offline"],"device":{"names":["laptop-01"]},"sinks":["stdout-debug"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online","peer.offline"],"filters":{"include":{"device_names":["laptop-01"]}},"sinks":["stdout-debug"]}]'
 ```
 
-### 4) Only route notifications for devices owned by user `123`
+### 4) Only route notifications for devices with a specific IP (or CIDR)
 
 JSON file snippet:
 
@@ -285,34 +356,10 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["*"],
-        "device": {
-          "owners": ["123"]
-        },
-        "sinks": ["webhook-primary"]
-      }
-    ]
-  }
-}
-```
-
-Env var equivalent:
-
-```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"owners":["123"]},"sinks":["webhook-primary"]}]'
-```
-
-### 5) Only route notifications for devices with a specific IP
-
-JSON file snippet:
-
-```json
-{
-  "notifier": {
-    "routes": [
-      {
-        "event_types": ["*"],
-        "device": {
-          "ips": ["100.64.0.10"]
+        "filters": {
+          "include": {
+            "ips": ["100.64.0.0/24"]
+          }
         },
         "sinks": ["discord-primary"]
       }
@@ -324,10 +371,38 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"ips":["100.64.0.10"]},"sinks":["discord-primary"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"filters":{"include":{"ips":["100.64.0.0/24"]}},"sinks":["discord-primary"]}]'
 ```
 
-### 6) Only route online events for one exact device (`name` + `tag`)
+### 5) Suppress Mullvad shared nodes while keeping other peer notifications
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "filters": {
+          "exclude": {
+            "device_names": ["*.mullvad.ts.net"]
+          }
+        },
+        "sinks": ["stdout-debug"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"filters":{"exclude":{"device_names":["*.mullvad.ts.net"]}},"sinks":["stdout-debug"]}]'
+```
+
+### 6) Only route online events for one exact device (`device_name` + `tag`)
 
 This matches only when both conditions are true.
 
@@ -339,9 +414,11 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["peer.online"],
-        "device": {
-          "names": ["node-a"],
-          "tags": ["tag:prod"]
+        "filters": {
+          "include": {
+            "device_names": ["node-a"],
+            "tags": ["tag:prod"]
+          }
         },
         "sinks": ["webhook-primary"]
       }
@@ -353,7 +430,7 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"names":["node-a"],"tags":["tag:prod"]},"sinks":["webhook-primary"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"filters":{"include":{"device_names":["node-a"],"tags":["tag:prod"]}},"sinks":["webhook-primary"]}]'
 ```
 
 ### 7) Wildcard event families, but only for selected device subset
@@ -366,9 +443,14 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["*"],
-        "device": {
-          "tags": ["tag:prod", "tag:staging"],
-          "owners": ["123", "456"]
+        "filters": {
+          "include": {
+            "tags": ["tag:prod", "tag:staging"],
+            "ips": ["100.64.0.0/24"]
+          },
+          "exclude": {
+            "device_names": ["*.mullvad.ts.net"]
+          }
         },
         "sinks": ["stdout-debug", "discord-primary"]
       }
@@ -380,7 +462,7 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"device":{"tags":["tag:prod","tag:staging"],"owners":["123","456"]},"sinks":["stdout-debug","discord-primary"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"filters":{"include":{"tags":["tag:prod","tag:staging"],"ips":["100.64.0.0/24"]},"exclude":{"device_names":["*.mullvad.ts.net"]}},"sinks":["stdout-debug","discord-primary"]}]'
 ```
 
 ### 8) Multiple routes: targeted online alerts + broad fallback
@@ -393,8 +475,10 @@ JSON file snippet:
     "routes": [
       {
         "event_types": ["peer.online"],
-        "device": {
-          "tags": ["tag:critical"]
+        "filters": {
+          "include": {
+            "tags": ["tag:critical"]
+          }
         },
         "sinks": ["discord-primary"]
       },
@@ -410,7 +494,40 @@ JSON file snippet:
 Env var equivalent:
 
 ```bash
-SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"device":{"tags":["tag:critical"]},"sinks":["discord-primary"]},{"event_types":["*"],"sinks":["stdout-debug"]}]'
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["peer.online"],"filters":{"include":{"tags":["tag:critical"]}},"sinks":["discord-primary"]},{"event_types":["*"],"sinks":["stdout-debug"]}]'
+```
+
+### 9) Include/exclude event filters with wildcard route
+
+This keeps a wildcard route but suppresses non-actionable event families.
+
+JSON file snippet:
+
+```json
+{
+  "notifier": {
+    "routes": [
+      {
+        "event_types": ["*"],
+        "filters": {
+          "include": {
+            "events": ["*"]
+          },
+          "exclude": {
+            "events": ["peer.routes.changed", "peer.tags.changed"]
+          }
+        },
+        "sinks": ["stdout-debug"]
+      }
+    ]
+  }
+}
+```
+
+Env var equivalent:
+
+```bash
+SENTINEL_NOTIFIER_ROUTES='[{"event_types":["*"],"filters":{"include":{"events":["*"]},"exclude":{"events":["peer.routes.changed","peer.tags.changed"]}},"sinks":["stdout-debug"]}]'
 ```
 
 ## Full Example

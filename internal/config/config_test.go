@@ -230,6 +230,92 @@ func TestValidateRejectsInvalidDeviceSelectorIP(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsNotificationFilters(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Filters: RouteFilterConfig{
+			Include: NotificationFilterConfig{
+				DeviceNames: []string{"*.mullvad.ts.net"},
+				Tags:        []string{"tag:prod"},
+				IPs:         []string{"100.64.0.10", "100.64.1.0/24"},
+				Events:      []string{"peer.online", "peer.offline"},
+			},
+			Exclude: NotificationFilterConfig{
+				DeviceNames: []string{"peer-noisy"},
+				Events:      []string{"peer.routes.changed"},
+			},
+		},
+	}}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected notification filters to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidNotificationFilterIP(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Filters: RouteFilterConfig{
+			Include: NotificationFilterConfig{
+				IPs: []string{"100.64.0.999"},
+			},
+		},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for invalid notification filter IP/CIDR")
+	}
+	if !strings.Contains(err.Error(), "must be a valid IP address or CIDR") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownNotificationFilterEvent(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Filters: RouteFilterConfig{
+			Include: NotificationFilterConfig{
+				Events: []string{"peer.not-real"},
+			},
+		},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for unknown notification filter event")
+	}
+	if !strings.Contains(err.Error(), "has unknown value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRejectsConflictingLegacyAndFilterFields(t *testing.T) {
+	cfg := Default()
+	cfg.Notifier.Routes = []RouteConfig{{
+		EventTypes: []string{"*"},
+		Sinks:      []string{"stdout-debug"},
+		Device: DeviceSelectorConfig{
+			Names: []string{"legacy-name"},
+		},
+		Filters: RouteFilterConfig{
+			Include: NotificationFilterConfig{
+				DeviceNames: []string{"new-name"},
+			},
+		},
+	}}
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for conflicting legacy and filter fields")
+	}
+	if !strings.Contains(err.Error(), "cannot set both device.names and filters.include.device_names") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateAcceptsDiscordSink(t *testing.T) {
 	cfg := Default()
 	cfg.Notifier.Sinks = append(cfg.Notifier.Sinks, SinkConfig{
@@ -306,6 +392,104 @@ func TestLoadSupportsStructuredEnvOnlyConfig(t *testing.T) {
 	}
 	if len(cfg.Notifier.Routes[0].Device.Names) != 1 || cfg.Notifier.Routes[0].Device.Names[0] != "nas-01" {
 		t.Fatalf("expected structured env route device selector to load, got %+v", cfg.Notifier.Routes[0].Device)
+	}
+}
+
+func TestLoadAppendsRouteFromShorthandEnvVars(t *testing.T) {
+	t.Setenv(envVarNotifierRouteEventType, "peer.online,peer.offline")
+	t.Setenv(envVarNotifierRouteSink, "stdout-debug")
+	t.Setenv(envVarNotifierRouteFilterExcludeDeviceNames, "*.mullvad.ts.net")
+	t.Setenv(envVarNotifierRouteFilterIncludeEvents, "peer.online")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Notifier.Routes) < 2 {
+		t.Fatalf("expected shorthand env route to append to defaults, got %d routes", len(cfg.Notifier.Routes))
+	}
+	route := cfg.Notifier.Routes[len(cfg.Notifier.Routes)-1]
+	if len(route.EventTypes) != 2 || route.EventTypes[0] != "peer.online" || route.EventTypes[1] != "peer.offline" {
+		t.Fatalf("unexpected shorthand route event types: %+v", route.EventTypes)
+	}
+	if len(route.Sinks) != 1 || route.Sinks[0] != "stdout-debug" {
+		t.Fatalf("unexpected shorthand route sinks: %+v", route.Sinks)
+	}
+	if len(route.Filters.Exclude.DeviceNames) != 1 || route.Filters.Exclude.DeviceNames[0] != "*.mullvad.ts.net" {
+		t.Fatalf("unexpected shorthand route exclude filter: %+v", route.Filters.Exclude.DeviceNames)
+	}
+	if len(route.Filters.Include.Events) != 1 || route.Filters.Include.Events[0] != "peer.online" {
+		t.Fatalf("unexpected shorthand route include event filters: %+v", route.Filters.Include.Events)
+	}
+}
+
+func TestLoadAppendsSinkFromShorthandEnvVars(t *testing.T) {
+	t.Setenv(envVarNotifierSinkName, "discord-extra")
+	t.Setenv(envVarNotifierSinkType, "discord")
+	t.Setenv(envVarNotifierSinkURL, "https://discord.com/api/webhooks/a/b")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, sink := range cfg.Notifier.Sinks {
+		if sink.Name == "discord-extra" {
+			found = true
+			if sink.Type != "discord" || sink.URL != "https://discord.com/api/webhooks/a/b" {
+				t.Fatalf("unexpected shorthand sink: %+v", sink)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected shorthand sink to be appended, got %+v", cfg.Notifier.Sinks)
+	}
+}
+
+func TestLoadShorthandRouteDefaultsWhenOnlyFilterConfigured(t *testing.T) {
+	t.Setenv(envVarNotifierRouteFilterExcludeDeviceNames, "*.mullvad.ts.net")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := cfg.Notifier.Routes[len(cfg.Notifier.Routes)-1]
+	if len(route.EventTypes) != 1 || route.EventTypes[0] != "*" {
+		t.Fatalf("expected shorthand route default event_types ['*'], got %+v", route.EventTypes)
+	}
+	if len(route.Sinks) != 1 || route.Sinks[0] != "stdout-debug" {
+		t.Fatalf("expected shorthand route default sink stdout-debug, got %+v", route.Sinks)
+	}
+}
+
+func TestLoadShorthandRouteAppendsToFileRoutes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sentinel.yaml")
+	content := "" +
+		"state:\n" +
+		"  path: " + filepath.ToSlash(filepath.Join(dir, "state.json")) + "\n" +
+		"notifier:\n" +
+		"  routes:\n" +
+		"    - event_types: [\"peer.online\"]\n" +
+		"      sinks: [\"stdout-debug\"]\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envVarNotifierRouteEventType, "peer.offline")
+	t.Setenv(envVarNotifierRouteSink, "stdout-debug")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Notifier.Routes) != 2 {
+		t.Fatalf("expected shorthand route to append to file routes, got %+v", cfg.Notifier.Routes)
+	}
+	if len(cfg.Notifier.Routes[0].EventTypes) != 1 || cfg.Notifier.Routes[0].EventTypes[0] != "peer.online" {
+		t.Fatalf("expected file route to stay first, got %+v", cfg.Notifier.Routes[0])
+	}
+	if len(cfg.Notifier.Routes[1].EventTypes) != 1 || cfg.Notifier.Routes[1].EventTypes[0] != "peer.offline" {
+		t.Fatalf("unexpected shorthand appended route %+v", cfg.Notifier.Routes[1])
 	}
 }
 

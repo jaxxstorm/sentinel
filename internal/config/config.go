@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -55,6 +56,7 @@ type RouteConfig struct {
 	Severities []string             `mapstructure:"severities" json:"severities"`
 	Sinks      []string             `mapstructure:"sinks" json:"sinks"`
 	Device     DeviceSelectorConfig `mapstructure:"device" json:"device"`
+	Filters    RouteFilterConfig    `mapstructure:"filters" json:"filters"`
 }
 
 type DeviceSelectorConfig struct {
@@ -62,6 +64,18 @@ type DeviceSelectorConfig struct {
 	Tags   []string `mapstructure:"tags" json:"tags"`
 	Owners []string `mapstructure:"owners" json:"owners"`
 	IPs    []string `mapstructure:"ips" json:"ips"`
+}
+
+type RouteFilterConfig struct {
+	Include NotificationFilterConfig `mapstructure:"include" json:"include"`
+	Exclude NotificationFilterConfig `mapstructure:"exclude" json:"exclude"`
+}
+
+type NotificationFilterConfig struct {
+	DeviceNames []string `mapstructure:"device_names" json:"device_names"`
+	Tags        []string `mapstructure:"tags" json:"tags"`
+	IPs         []string `mapstructure:"ips" json:"ips"`
+	Events      []string `mapstructure:"events" json:"events"`
 }
 
 type SinkConfig struct {
@@ -111,6 +125,31 @@ const (
 	envVarDetectorOrder     = "SENTINEL_DETECTOR_ORDER"
 	envVarNotifierSinks     = "SENTINEL_NOTIFIER_SINKS"
 	envVarNotifierRoutes    = "SENTINEL_NOTIFIER_ROUTES"
+
+	envVarNotifierRouteEventType  = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE"
+	envVarNotifierRouteEventTypes = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES"
+	envVarNotifierRouteSeverities = "SENTINEL_NOTIFIER_ROUTE_SEVERITIES"
+	envVarNotifierRouteSinks      = "SENTINEL_NOTIFIER_ROUTE_SINKS"
+	envVarNotifierRouteSink       = "SENTINEL_NOTIFIER_SINK"
+
+	envVarNotifierRouteDeviceNames  = "SENTINEL_NOTIFIER_ROUTE_DEVICE_NAMES"
+	envVarNotifierRouteDeviceTags   = "SENTINEL_NOTIFIER_ROUTE_DEVICE_TAGS"
+	envVarNotifierRouteDeviceOwners = "SENTINEL_NOTIFIER_ROUTE_DEVICE_OWNERS"
+	envVarNotifierRouteDeviceIPs    = "SENTINEL_NOTIFIER_ROUTE_DEVICE_IPS"
+
+	envVarNotifierRouteFilterIncludeDeviceNames = "SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_DEVICE_NAMES"
+	envVarNotifierRouteFilterIncludeTags        = "SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_TAGS"
+	envVarNotifierRouteFilterIncludeIPs         = "SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_IPS"
+	envVarNotifierRouteFilterIncludeEvents      = "SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_EVENTS"
+
+	envVarNotifierRouteFilterExcludeDeviceNames = "SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_DEVICE_NAMES"
+	envVarNotifierRouteFilterExcludeTags        = "SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_TAGS"
+	envVarNotifierRouteFilterExcludeIPs         = "SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_IPS"
+	envVarNotifierRouteFilterExcludeEvents      = "SENTINEL_NOTIFIER_ROUTE_FILTER_EXCLUDE_EVENTS"
+
+	envVarNotifierSinkName = "SENTINEL_NOTIFIER_SINK_NAME"
+	envVarNotifierSinkType = "SENTINEL_NOTIFIER_SINK_TYPE"
+	envVarNotifierSinkURL  = "SENTINEL_NOTIFIER_SINK_URL"
 )
 
 var advertiseTagPattern = regexp.MustCompile(`^tag:[A-Za-z0-9._-]+$`)
@@ -241,8 +280,169 @@ func Load(path string) (Config, error) {
 	applyStringEnvOverride(envVarTSNetClientID, &cfg.TSNet.ClientID)
 	applyStringEnvOverride(envVarTSNetIDToken, &cfg.TSNet.IDToken)
 	applyStringEnvOverride(envVarTSNetAudience, &cfg.TSNet.Audience)
+	if err := applyShorthandEnvOverrides(&cfg); err != nil {
+		return cfg, err
+	}
 	applySensibleDefaults(&cfg)
 	return cfg, Validate(cfg)
+}
+
+func applyShorthandEnvOverrides(cfg *Config) error {
+	if err := appendNotifierSinkFromEnv(cfg); err != nil {
+		return err
+	}
+	if err := appendNotifierRouteFromEnv(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func appendNotifierSinkFromEnv(cfg *Config) error {
+	name, hasName := lookupNonEmptyEnv(envVarNotifierSinkName)
+	sinkType, hasType := lookupNonEmptyEnv(envVarNotifierSinkType)
+	url, hasURL := lookupNonEmptyEnv(envVarNotifierSinkURL)
+	if !hasName && !hasType && !hasURL {
+		return nil
+	}
+
+	sink := SinkConfig{
+		Name: strings.TrimSpace(name),
+		Type: strings.TrimSpace(sinkType),
+		URL:  strings.TrimSpace(url),
+	}
+	if sink.Name == "" {
+		sink.Name = "env-sink"
+	}
+	if sink.Type == "" {
+		sink.Type = "webhook"
+	}
+	cfg.Notifier.Sinks = append(cfg.Notifier.Sinks, sink)
+	return nil
+}
+
+func appendNotifierRouteFromEnv(cfg *Config) error {
+	route := RouteConfig{}
+	hasAny := false
+
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteEventTypes, envVarNotifierRouteEventType); err != nil {
+		return err
+	} else if ok {
+		route.EventTypes = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteSeverities); err != nil {
+		return err
+	} else if ok {
+		route.Severities = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteSinks, envVarNotifierRouteSink); err != nil {
+		return err
+	} else if ok {
+		route.Sinks = values
+		hasAny = true
+	}
+
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteDeviceNames); err != nil {
+		return err
+	} else if ok {
+		route.Device.Names = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteDeviceTags); err != nil {
+		return err
+	} else if ok {
+		route.Device.Tags = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteDeviceOwners); err != nil {
+		return err
+	} else if ok {
+		route.Device.Owners = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteDeviceIPs); err != nil {
+		return err
+	} else if ok {
+		route.Device.IPs = values
+		hasAny = true
+	}
+
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterIncludeDeviceNames); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Include.DeviceNames = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterIncludeTags); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Include.Tags = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterIncludeIPs); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Include.IPs = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterIncludeEvents); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Include.Events = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterExcludeDeviceNames); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Exclude.DeviceNames = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterExcludeTags); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Exclude.Tags = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterExcludeIPs); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Exclude.IPs = values
+		hasAny = true
+	}
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteFilterExcludeEvents); err != nil {
+		return err
+	} else if ok {
+		route.Filters.Exclude.Events = values
+		hasAny = true
+	}
+
+	if !hasAny {
+		return nil
+	}
+	if len(route.EventTypes) == 0 {
+		route.EventTypes = []string{"*"}
+	}
+	if len(route.Sinks) == 0 {
+		route.Sinks = []string{"stdout-debug"}
+	}
+	cfg.Notifier.Routes = append(cfg.Notifier.Routes, route)
+	return nil
+}
+
+func parseListFromAnyEnv(keys ...string) ([]string, bool, error) {
+	for _, key := range keys {
+		raw, ok := lookupNonEmptyEnv(key)
+		if !ok {
+			continue
+		}
+		values, err := parseStringListEnv(key, raw)
+		if err != nil {
+			return nil, true, err
+		}
+		return values, true, nil
+	}
+	return nil, false, nil
 }
 
 func applyStructuredEnvOverrides(cfg *Config) error {
@@ -516,6 +716,15 @@ func Validate(cfg Config) error {
 		if err := validateDeviceSelector(i, &route.Device); err != nil {
 			return err
 		}
+		if err := validateRouteFilterConflicts(i, &route); err != nil {
+			return err
+		}
+		if err := validateNotificationFilter(i, "include", &route.Filters.Include); err != nil {
+			return err
+		}
+		if err := validateNotificationFilter(i, "exclude", &route.Filters.Exclude); err != nil {
+			return err
+		}
 	}
 	for i, sink := range cfg.Notifier.Sinks {
 		sinkType := strings.ToLower(strings.TrimSpace(sink.Type))
@@ -526,6 +735,60 @@ func Validate(cfg Config) error {
 		}
 		if sinkType == "discord" && strings.TrimSpace(sink.URL) == "" {
 			return fmt.Errorf("notifier.sinks[%d].url is required for discord sink", i)
+		}
+	}
+	return nil
+}
+
+func validateRouteFilterConflicts(routeIndex int, route *RouteConfig) error {
+	if len(route.Device.Names) > 0 && len(route.Filters.Include.DeviceNames) > 0 {
+		return fmt.Errorf("notifier.routes[%d] cannot set both device.names and filters.include.device_names", routeIndex)
+	}
+	if len(route.Device.Tags) > 0 && len(route.Filters.Include.Tags) > 0 {
+		return fmt.Errorf("notifier.routes[%d] cannot set both device.tags and filters.include.tags", routeIndex)
+	}
+	if len(route.Device.IPs) > 0 && len(route.Filters.Include.IPs) > 0 {
+		return fmt.Errorf("notifier.routes[%d] cannot set both device.ips and filters.include.ips", routeIndex)
+	}
+	return nil
+}
+
+func validateNotificationFilter(routeIndex int, filterName string, filter *NotificationFilterConfig) error {
+	for j, raw := range filter.DeviceNames {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.device_names[%d] must not be empty", routeIndex, filterName, j)
+		}
+		if strings.ContainsAny(name, "*?[") {
+			if _, err := path.Match(name, "sentinel.example.ts.net"); err != nil {
+				return fmt.Errorf("notifier.routes[%d].filters.%s.device_names[%d] must be a valid glob pattern", routeIndex, filterName, j)
+			}
+		}
+	}
+	for j, raw := range filter.Tags {
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.tags[%d] must not be empty", routeIndex, filterName, j)
+		}
+	}
+	for j, raw := range filter.IPs {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.ips[%d] must not be empty", routeIndex, filterName, j)
+		}
+		if _, err := netip.ParseAddr(value); err == nil {
+			continue
+		}
+		if _, err := netip.ParsePrefix(value); err != nil {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.ips[%d] must be a valid IP address or CIDR", routeIndex, filterName, j)
+		}
+	}
+	for j, raw := range filter.Events {
+		eventType := strings.TrimSpace(raw)
+		if eventType == "" {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.events[%d] must not be empty", routeIndex, filterName, j)
+		}
+		if eventType != "*" && !event.IsKnownType(eventType) {
+			return fmt.Errorf("notifier.routes[%d].filters.%s.events[%d] has unknown value %q", routeIndex, filterName, j, eventType)
 		}
 	}
 	return nil

@@ -186,11 +186,9 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 			Severities: r.Severities,
 			Sinks:      validSinks,
 			Device: notify.DeviceSelector{
-				Names:  r.Device.Names,
-				Tags:   r.Device.Tags,
 				Owners: r.Device.Owners,
-				IPs:    r.Device.IPs,
 			},
+			Filters: routeFiltersFromConfig(r),
 		})
 	}
 	if len(routes) == 0 {
@@ -259,6 +257,54 @@ func runOnceWithTimeout(ctx context.Context, fn func(context.Context) error) err
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return fn(cctx)
+}
+
+func routeFiltersFromConfig(r config.RouteConfig) notify.RouteFilters {
+	filters := notify.RouteFilters{
+		Include: notify.NotificationFilter{
+			DeviceNames: normalizedFilterValues(r.Filters.Include.DeviceNames),
+			Tags:        normalizedFilterValues(r.Filters.Include.Tags),
+			IPs:         normalizedFilterValues(r.Filters.Include.IPs),
+			Events:      normalizedFilterValues(r.Filters.Include.Events),
+		},
+		Exclude: notify.NotificationFilter{
+			DeviceNames: normalizedFilterValues(r.Filters.Exclude.DeviceNames),
+			Tags:        normalizedFilterValues(r.Filters.Exclude.Tags),
+			IPs:         normalizedFilterValues(r.Filters.Exclude.IPs),
+			Events:      normalizedFilterValues(r.Filters.Exclude.Events),
+		},
+	}
+
+	// Backward compatibility: legacy device selectors map to include filters.
+	if len(filters.Include.DeviceNames) == 0 {
+		filters.Include.DeviceNames = normalizedFilterValues(r.Device.Names)
+	}
+	if len(filters.Include.Tags) == 0 {
+		filters.Include.Tags = normalizedFilterValues(r.Device.Tags)
+	}
+	if len(filters.Include.IPs) == 0 {
+		filters.Include.IPs = normalizedFilterValues(r.Device.IPs)
+	}
+
+	return filters
+}
+
+func normalizedFilterValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func printLine(format string, args ...any) {
