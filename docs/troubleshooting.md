@@ -87,6 +87,16 @@ Sentinel resolves config in this order:
 
 If behavior is surprising, check whether a structured key is replacing an entire section.
 
+For shorthand route append keys, use canonical names:
+- `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES`
+- `SENTINEL_NOTIFIER_ROUTE_SINKS`
+
+Legacy aliases still work but are deprecated:
+- `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE`
+- `SENTINEL_NOTIFIER_SINK`
+
+If both canonical and deprecated aliases are set, canonical values win.
+
 ## Wildcard routing checks
 
 If you expect all events to be delivered, verify route config contains wildcard:

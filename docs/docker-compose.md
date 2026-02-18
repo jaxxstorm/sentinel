@@ -72,6 +72,8 @@ The default image in the template is `ghcr.io/jaxxstorm/sentinel:latest`. Pin to
 | `SENTINEL_POLICY_BATCH_SIZE` | No | Maps to `policy.batch_size`. |
 | `SENTINEL_NOTIFIER_SINKS` | No | Structured JSON array override. |
 | `SENTINEL_NOTIFIER_ROUTES` | No | Structured JSON array override. |
+| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` | No | Canonical shorthand route append key for `event_types` (comma-separated). |
+| `SENTINEL_NOTIFIER_ROUTE_SINKS` | No | Canonical shorthand route append key for `sinks` (comma-separated). |
 | `SENTINEL_WEBHOOK_URL` | No | Used by `${SENTINEL_WEBHOOK_URL}` placeholders. |
 | `SENTINEL_DISCORD_WEBHOOK_URL` | No | Used by `${SENTINEL_DISCORD_WEBHOOK_URL}` placeholders. |
 | `SENTINEL_OUTPUT_LOG_FORMAT` | No | `pretty` or `json`. |
@@ -85,6 +87,12 @@ The default image in the template is `ghcr.io/jaxxstorm/sentinel:latest`. Pin to
 | `SENTINEL_TSNET_AUDIENCE` | No | Optional OAuth companion field. |
 | `SENTINEL_TSNET_ALLOW_INTERACTIVE_FALLBACK` | No | Fallback behavior switch. |
 | `SENTINEL_TSNET_LOGIN_TIMEOUT` | No | Interactive login timeout override. |
+
+Deprecated shorthand aliases remain supported for compatibility:
+- `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` (use `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES`)
+- `SENTINEL_NOTIFIER_SINK` (use `SENTINEL_NOTIFIER_ROUTE_SINKS`)
+
+When both canonical and deprecated aliases are set, canonical values take precedence.
 
 ## Secret Handling
 

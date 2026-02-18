@@ -48,6 +48,21 @@ These keys are used for complex sections that are hard to express with scalar en
 
 If these keys are present, they override their entire corresponding config sections.
 
+## Shorthand Route Append Variables (Canonical)
+
+For non-JSON route append behavior, prefer canonical route-scoped keys:
+
+- `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES`
+- `SENTINEL_NOTIFIER_ROUTE_SINKS`
+- `SENTINEL_NOTIFIER_ROUTE_SEVERITIES`
+
+Legacy aliases remain compatible but are deprecated:
+
+- `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` -> `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES`
+- `SENTINEL_NOTIFIER_SINK` -> `SENTINEL_NOTIFIER_ROUTE_SINKS`
+
+If both canonical and deprecated alias keys are set, Sentinel uses canonical values.
+
 ## Placeholder Environment Variables in Config
 
 If your config uses `${...}` placeholders for sink URLs, you must provide those environment variables at runtime.

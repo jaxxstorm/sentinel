@@ -126,11 +126,11 @@ const (
 	envVarNotifierSinks     = "SENTINEL_NOTIFIER_SINKS"
 	envVarNotifierRoutes    = "SENTINEL_NOTIFIER_ROUTES"
 
-	envVarNotifierRouteEventType  = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE"
-	envVarNotifierRouteEventTypes = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES"
-	envVarNotifierRouteSeverities = "SENTINEL_NOTIFIER_ROUTE_SEVERITIES"
-	envVarNotifierRouteSinks      = "SENTINEL_NOTIFIER_ROUTE_SINKS"
-	envVarNotifierRouteSink       = "SENTINEL_NOTIFIER_SINK"
+	envVarNotifierRouteEventTypes       = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES"
+	envVarNotifierRouteEventTypeLegacy  = "SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE"
+	envVarNotifierRouteSeverities       = "SENTINEL_NOTIFIER_ROUTE_SEVERITIES"
+	envVarNotifierRouteSinks            = "SENTINEL_NOTIFIER_ROUTE_SINKS"
+	envVarNotifierRouteSinksLegacyAlias = "SENTINEL_NOTIFIER_SINK"
 
 	envVarNotifierRouteDeviceNames  = "SENTINEL_NOTIFIER_ROUTE_DEVICE_NAMES"
 	envVarNotifierRouteDeviceTags   = "SENTINEL_NOTIFIER_ROUTE_DEVICE_TAGS"
@@ -324,7 +324,7 @@ func appendNotifierRouteFromEnv(cfg *Config) error {
 	route := RouteConfig{}
 	hasAny := false
 
-	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteEventTypes, envVarNotifierRouteEventType); err != nil {
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteEventTypes, envVarNotifierRouteEventTypeLegacy); err != nil {
 		return err
 	} else if ok {
 		route.EventTypes = values
@@ -336,7 +336,7 @@ func appendNotifierRouteFromEnv(cfg *Config) error {
 		route.Severities = values
 		hasAny = true
 	}
-	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteSinks, envVarNotifierRouteSink); err != nil {
+	if values, ok, err := parseListFromAnyEnv(envVarNotifierRouteSinks, envVarNotifierRouteSinksLegacyAlias); err != nil {
 		return err
 	} else if ok {
 		route.Sinks = values

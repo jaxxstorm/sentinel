@@ -150,11 +150,11 @@ For notifier sinks/routes, Sentinel also supports non-JSON env vars. These **app
 | `SENTINEL_NOTIFIER_SINK_NAME` | string | appends one sink definition (`name`) |
 | `SENTINEL_NOTIFIER_SINK_TYPE` | string | appends one sink definition (`type`) |
 | `SENTINEL_NOTIFIER_SINK_URL` | string | appends one sink definition (`url`) |
-| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` | comma list | appends one route (`event_types`) |
 | `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` | comma list | appends one route (`event_types`) |
+| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` | comma list | deprecated alias for `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` |
 | `SENTINEL_NOTIFIER_ROUTE_SEVERITIES` | comma list | appends one route (`severities`) |
-| `SENTINEL_NOTIFIER_SINK` | comma list | appends one route (`sinks`) |
 | `SENTINEL_NOTIFIER_ROUTE_SINKS` | comma list | appends one route (`sinks`) |
+| `SENTINEL_NOTIFIER_SINK` | comma list | deprecated alias for `SENTINEL_NOTIFIER_ROUTE_SINKS` |
 | `SENTINEL_NOTIFIER_ROUTE_DEVICE_NAMES` | comma list | appends one route (`device.names`) |
 | `SENTINEL_NOTIFIER_ROUTE_DEVICE_TAGS` | comma list | appends one route (`device.tags`) |
 | `SENTINEL_NOTIFIER_ROUTE_DEVICE_OWNERS` | comma list | appends one route (`device.owners`) |
@@ -171,6 +171,17 @@ For notifier sinks/routes, Sentinel also supports non-JSON env vars. These **app
 Notes:
 - Scalar fields (for example `SENTINEL_POLL_INTERVAL`, `SENTINEL_TSNET_HOSTNAME`) are already settable directly without JSON.
 - Use structured JSON env vars when you want full replacement control for complete sink/route arrays.
+- Canonical shorthand keys are `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` and `SENTINEL_NOTIFIER_ROUTE_SINKS`.
+- If both canonical and deprecated alias keys are set, Sentinel uses canonical values.
+
+### Migration Notes (Legacy Shorthand Aliases)
+
+Use these canonical replacements:
+
+| Deprecated key | Canonical key |
+| --- | --- |
+| `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` | `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES` |
+| `SENTINEL_NOTIFIER_SINK` | `SENTINEL_NOTIFIER_ROUTE_SINKS` |
 
 ### Tailscale auth key precedence
 
@@ -221,12 +232,12 @@ SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
 SENTINEL_NOTIFIER_SINK_NAME=discord-primary \
 SENTINEL_NOTIFIER_SINK_TYPE=discord \
 SENTINEL_NOTIFIER_SINK_URL='${SENTINEL_DISCORD_WEBHOOK_URL}' \
-SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE='*' \
+SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES='*' \
 SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_EVENTS='*' \
 SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_DEVICE_NAMES='sentinel' \
 SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_TAGS='tag:dev' \
 SENTINEL_NOTIFIER_ROUTE_FILTER_INCLUDE_IPS='100.64.0.10' \
-SENTINEL_NOTIFIER_SINK='stdout-debug,discord-primary' \
+SENTINEL_NOTIFIER_ROUTE_SINKS='stdout-debug,discord-primary' \
 sentinel validate-config
 ```
 

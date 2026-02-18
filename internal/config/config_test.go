@@ -396,8 +396,8 @@ func TestLoadSupportsStructuredEnvOnlyConfig(t *testing.T) {
 }
 
 func TestLoadAppendsRouteFromShorthandEnvVars(t *testing.T) {
-	t.Setenv(envVarNotifierRouteEventType, "peer.online,peer.offline")
-	t.Setenv(envVarNotifierRouteSink, "stdout-debug")
+	t.Setenv(envVarNotifierRouteEventTypes, "peer.online,peer.offline")
+	t.Setenv(envVarNotifierRouteSinks, "stdout-debug")
 	t.Setenv(envVarNotifierRouteFilterExcludeDeviceNames, "*.mullvad.ts.net")
 	t.Setenv(envVarNotifierRouteFilterIncludeEvents, "peer.online")
 
@@ -420,6 +420,45 @@ func TestLoadAppendsRouteFromShorthandEnvVars(t *testing.T) {
 	}
 	if len(route.Filters.Include.Events) != 1 || route.Filters.Include.Events[0] != "peer.online" {
 		t.Fatalf("unexpected shorthand route include event filters: %+v", route.Filters.Include.Events)
+	}
+}
+
+func TestLoadAppendsRouteFromLegacyShorthandEnvAliases(t *testing.T) {
+	t.Setenv(envVarNotifierRouteEventTypeLegacy, "peer.online,peer.offline")
+	t.Setenv(envVarNotifierRouteSinksLegacyAlias, "stdout-debug")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Notifier.Routes) < 2 {
+		t.Fatalf("expected shorthand env route to append to defaults, got %d routes", len(cfg.Notifier.Routes))
+	}
+	route := cfg.Notifier.Routes[len(cfg.Notifier.Routes)-1]
+	if len(route.EventTypes) != 2 || route.EventTypes[0] != "peer.online" || route.EventTypes[1] != "peer.offline" {
+		t.Fatalf("unexpected shorthand route event types from legacy aliases: %+v", route.EventTypes)
+	}
+	if len(route.Sinks) != 1 || route.Sinks[0] != "stdout-debug" {
+		t.Fatalf("unexpected shorthand route sinks from legacy aliases: %+v", route.Sinks)
+	}
+}
+
+func TestLoadCanonicalShorthandRouteKeysTakePrecedenceOverLegacyAliases(t *testing.T) {
+	t.Setenv(envVarNotifierRouteEventTypes, "peer.online")
+	t.Setenv(envVarNotifierRouteEventTypeLegacy, "peer.offline")
+	t.Setenv(envVarNotifierRouteSinks, "stdout-debug")
+	t.Setenv(envVarNotifierRouteSinksLegacyAlias, "legacy-sink")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := cfg.Notifier.Routes[len(cfg.Notifier.Routes)-1]
+	if len(route.EventTypes) != 1 || route.EventTypes[0] != "peer.online" {
+		t.Fatalf("expected canonical event types to win over legacy alias, got %+v", route.EventTypes)
+	}
+	if len(route.Sinks) != 1 || route.Sinks[0] != "stdout-debug" {
+		t.Fatalf("expected canonical sinks to win over legacy alias, got %+v", route.Sinks)
 	}
 }
 
@@ -475,8 +514,8 @@ func TestLoadShorthandRouteAppendsToFileRoutes(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(envVarNotifierRouteEventType, "peer.offline")
-	t.Setenv(envVarNotifierRouteSink, "stdout-debug")
+	t.Setenv(envVarNotifierRouteEventTypes, "peer.offline")
+	t.Setenv(envVarNotifierRouteSinks, "stdout-debug")
 
 	cfg, err := Load(path)
 	if err != nil {
