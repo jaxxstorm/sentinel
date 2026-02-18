@@ -177,6 +177,49 @@ func TestBuildRuntimeResolvesOAuthCredentialsAndTagsFromEnv(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimePrefersTSNetAuthKeyEnvOverLegacyAlias(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "sentinel.yaml")
+	cfg := "state:\n  path: " + filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")) + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SENTINEL_TSNET_AUTH_KEY", "tskey-auth-canonical")
+	t.Setenv("SENTINEL_TAILSCALE_AUTH_KEY", "tskey-auth-legacy")
+
+	deps, err := buildRuntime(&GlobalOptions{ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deps.cfg.TSNet.AuthKey != "tskey-auth-canonical" {
+		t.Fatalf("expected canonical auth key env to win, got %q", deps.cfg.TSNet.AuthKey)
+	}
+	if deps.cfg.TSNet.AuthKeySource != "env" {
+		t.Fatalf("expected auth key source env, got %q", deps.cfg.TSNet.AuthKeySource)
+	}
+}
+
+func TestBuildRuntimeUsesLegacyAuthKeyAliasWhenCanonicalMissing(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "sentinel.yaml")
+	cfg := "state:\n  path: " + filepath.ToSlash(filepath.Join(t.TempDir(), "state.json")) + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SENTINEL_TAILSCALE_AUTH_KEY", "tskey-auth-legacy")
+
+	deps, err := buildRuntime(&GlobalOptions{ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deps.cfg.TSNet.AuthKey != "tskey-auth-legacy" {
+		t.Fatalf("expected legacy auth key alias to be used, got %q", deps.cfg.TSNet.AuthKey)
+	}
+	if deps.cfg.TSNet.AuthKeySource != "env" {
+		t.Fatalf("expected auth key source env, got %q", deps.cfg.TSNet.AuthKeySource)
+	}
+}
+
 func TestRouteFiltersFromConfigMapsLegacySelectors(t *testing.T) {
 	route := config.RouteConfig{
 		Device: config.DeviceSelectorConfig{

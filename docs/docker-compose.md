@@ -17,7 +17,7 @@ For release artifact details and tagging behavior, see [Release Artifacts](relea
    ```
 2. Set required auth value (default mode is `auth_key`):
    ```bash
-   SENTINEL_TAILSCALE_AUTH_KEY=tskey-auth-...   # in .env
+   SENTINEL_TSNET_AUTH_KEY=tskey-auth-...   # in .env
    ```
 3. Run locally with source build overlay:
    ```bash
@@ -31,7 +31,7 @@ State data is stored in `./.sentinel` via the local overlay volume mount.
 1. In Railway, choose **New Project** -> **Deploy from Template / Docker Compose**.
 2. Import `docker-compose.yml` from this repository.
 3. Configure required variables in Railway:
-   - `SENTINEL_TAILSCALE_AUTH_KEY` (required for default `auth_key` mode)
+   - `SENTINEL_TSNET_AUTH_KEY` (required for default `auth_key` mode)
 4. Optionally configure any additional `SENTINEL_` variables from the matrix below.
 
 The default image in the template is `ghcr.io/jaxxstorm/sentinel:latest`. Pin to a version tag (for example `ghcr.io/jaxxstorm/sentinel:v1.2.3`) when deterministic rollout behavior is required.
@@ -42,7 +42,7 @@ The default image in the template is `ghcr.io/jaxxstorm/sentinel:latest`. Pin to
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `SENTINEL_TAILSCALE_AUTH_KEY` | Yes (default) | Required when `SENTINEL_TSNET_LOGIN_MODE=auth_key` (template default). |
+| `SENTINEL_TSNET_AUTH_KEY` | Yes (default) | Canonical auth key env var required when `SENTINEL_TSNET_LOGIN_MODE=auth_key` (template default). |
 
 ### Conditionally required by login mode
 
@@ -80,13 +80,19 @@ The default image in the template is `ghcr.io/jaxxstorm/sentinel:latest`. Pin to
 | `SENTINEL_OUTPUT_LOG_LEVEL` | No | Log level override. |
 | `SENTINEL_OUTPUT_NO_COLOR` | No | Color output toggle. |
 | `SENTINEL_TSNET_LOGIN_MODE` | No | `auto`, `auth_key`, `oauth`, `interactive`. |
-| `SENTINEL_TSNET_AUTH_KEY` | No | Lower-priority auth key source than `SENTINEL_TAILSCALE_AUTH_KEY`. |
+| `SENTINEL_TAILSCALE_AUTH_KEY` | No | Deprecated alias for `SENTINEL_TSNET_AUTH_KEY`. |
 | `SENTINEL_TSNET_HOSTNAME` | No | Maps to `tsnet.hostname`. |
 | `SENTINEL_TSNET_ADVERTISE_TAGS` | No | JSON array or comma-separated tags. |
 | `SENTINEL_TSNET_ID_TOKEN` | No | Optional OAuth companion field. |
 | `SENTINEL_TSNET_AUDIENCE` | No | Optional OAuth companion field. |
 | `SENTINEL_TSNET_ALLOW_INTERACTIVE_FALLBACK` | No | Fallback behavior switch. |
 | `SENTINEL_TSNET_LOGIN_TIMEOUT` | No | Interactive login timeout override. |
+
+Auth key precedence:
+- `--tailscale-auth-key`
+- `SENTINEL_TSNET_AUTH_KEY`
+- `SENTINEL_TAILSCALE_AUTH_KEY` (deprecated alias)
+- `tsnet.auth_key` from config
 
 Deprecated shorthand aliases remain supported for compatibility:
 - `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPE` (use `SENTINEL_NOTIFIER_ROUTE_EVENT_TYPES`)

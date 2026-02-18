@@ -119,8 +119,8 @@ see [Docker Compose and Railway](docker-compose.md).
 | `SENTINEL_TSNET_STATE_DIR` | `tsnet.state_dir` |
 | `SENTINEL_TSNET_ADVERTISE_TAGS` | `tsnet.advertise_tags` (JSON array or comma-separated list) |
 | `SENTINEL_TSNET_LOGIN_MODE` | `tsnet.login_mode` |
-| `SENTINEL_TSNET_AUTH_KEY` | `tsnet.auth_key` |
-| `SENTINEL_TAILSCALE_AUTH_KEY` | Tailscale onboarding auth key fallback used by runtime wiring |
+| `SENTINEL_TSNET_AUTH_KEY` | `tsnet.auth_key` (canonical auth key env var) |
+| `SENTINEL_TAILSCALE_AUTH_KEY` | Deprecated alias for `SENTINEL_TSNET_AUTH_KEY` |
 | `SENTINEL_TSNET_CLIENT_SECRET` | `tsnet.client_secret` |
 | `SENTINEL_TSNET_CLIENT_ID` | `tsnet.client_id` |
 | `SENTINEL_TSNET_ID_TOKEN` | `tsnet.id_token` |
@@ -188,8 +188,9 @@ Use these canonical replacements:
 Sentinel resolves the onboarding auth key in this order:
 
 1. `--tailscale-auth-key` CLI flag
-2. `SENTINEL_TAILSCALE_AUTH_KEY`
-3. `SENTINEL_TSNET_AUTH_KEY` / `tsnet.auth_key`
+2. `SENTINEL_TSNET_AUTH_KEY`
+3. `SENTINEL_TAILSCALE_AUTH_KEY` (deprecated alias)
+4. `tsnet.auth_key` from config file
 
 When both auth key and OAuth credentials are configured, Sentinel prioritizes auth key onboarding.
 OAuth credentials are used when no auth key is resolved (or when `tsnet.login_mode=oauth`).

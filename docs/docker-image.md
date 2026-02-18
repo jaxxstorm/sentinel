@@ -16,8 +16,8 @@ see [Docker Compose and Railway](docker-compose.md).
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `SENTINEL_CONFIG_PATH` | No | Optional config file path used by Sentinel when running with a mounted config file. |
-| `SENTINEL_TAILSCALE_AUTH_KEY` | Depends on login mode | Auth key for Tailscale onboarding (`tsnet.login_mode=auth_key` requires this unless `tsnet.auth_key` is set in config). |
-| `SENTINEL_TSNET_AUTH_KEY` | No | Maps to `tsnet.auth_key` in config. Used as a lower-priority auth key source than `SENTINEL_TAILSCALE_AUTH_KEY`. |
+| `SENTINEL_TSNET_AUTH_KEY` | Depends on login mode | Canonical auth key env var for Tailscale onboarding (`tsnet.login_mode=auth_key` requires this unless `tsnet.auth_key` is set in config). |
+| `SENTINEL_TAILSCALE_AUTH_KEY` | No | Deprecated alias for `SENTINEL_TSNET_AUTH_KEY`. |
 | `SENTINEL_TSNET_ADVERTISE_TAGS` | No | Tags requested during enrollment. Accepts JSON array or comma-separated tags (for example `tag:sentinel,tag:prod`). |
 | `SENTINEL_TSNET_CLIENT_SECRET` | Depends on login mode | OAuth client secret for tsnet onboarding credentials. |
 | `SENTINEL_TSNET_CLIENT_ID` | Required with client secret | OAuth client identifier paired with `SENTINEL_TSNET_CLIENT_SECRET`. |
@@ -91,7 +91,7 @@ notifier:
 ```bash
 docker run --rm \
   -e SENTINEL_CONFIG_PATH=/sentinel/config.yaml \
-  -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_TSNET_AUTH_KEY=tskey-... \
   -e SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
   -e SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
   -e SENTINEL_TSNET_CLIENT_ID=oauth-client-id \
@@ -118,7 +118,7 @@ docker run --rm \
   -e SENTINEL_STATE_PATH=/var/lib/sentinel/state.json \
   -e SENTINEL_TSNET_STATE_DIR=/var/lib/sentinel/tsnet \
   -e SENTINEL_TSNET_LOGIN_MODE=auto \
-  -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_TSNET_AUTH_KEY=tskey-... \
   -e SENTINEL_TSNET_ADVERTISE_TAGS='["tag:sentinel"]' \
   -e SENTINEL_TSNET_CLIENT_SECRET=oauth-client-secret \
   -e SENTINEL_TSNET_CLIENT_ID=oauth-client-id \

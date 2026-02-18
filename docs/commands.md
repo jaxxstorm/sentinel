@@ -49,7 +49,7 @@ sentinel test-notify --config ./config.example.yaml --dry-run
 
 ```bash
 docker run --rm \
-  -e SENTINEL_TAILSCALE_AUTH_KEY=tskey-... \
+  -e SENTINEL_TSNET_AUTH_KEY=tskey-... \
   -e SENTINEL_CONFIG_PATH=/sentinel/config.yaml \
   -v "$(pwd)/config.example.yaml:/sentinel/config.yaml:ro" \
   ghcr.io/jaxxstorm/sentinel:latest status

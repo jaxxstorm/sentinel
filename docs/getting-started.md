@@ -75,7 +75,7 @@ For local container workflows with source builds:
 cp .env.example .env
 ```
 
-Set `SENTINEL_TAILSCALE_AUTH_KEY` in `.env`, then run:
+Set `SENTINEL_TSNET_AUTH_KEY` in `.env`, then run:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
@@ -109,8 +109,9 @@ Sentinel supports three onboarding modes in `tsnet.login_mode`:
 Auth key sources are checked in this order:
 
 1. `--tailscale-auth-key`
-2. `SENTINEL_TAILSCALE_AUTH_KEY`
-3. `tsnet.auth_key` from config
+2. `SENTINEL_TSNET_AUTH_KEY`
+3. `SENTINEL_TAILSCALE_AUTH_KEY` (deprecated alias)
+4. `tsnet.auth_key` from config
 
 ## Local Docs Preview (Docsify)
 

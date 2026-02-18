@@ -117,7 +117,7 @@ func (m *manager) EnsureEnrolled(ctx context.Context) (Status, error) {
 func (m *manager) tryAuthKey(ctx context.Context, allowFallback bool) (Status, error) {
 	authKey := strings.TrimSpace(m.cfg.AuthKey)
 	if authKey == "" {
-		return m.fail("auth_key_missing", ErrorClassNonRetryable, "tailscale auth key is required for auth_key mode", "set --tailscale-auth-key, SENTINEL_TAILSCALE_AUTH_KEY, or tailscale.auth_key", nil)
+		return m.fail("auth_key_missing", ErrorClassNonRetryable, "tailscale auth key is required for auth_key mode", "set --tailscale-auth-key, SENTINEL_TSNET_AUTH_KEY (or deprecated SENTINEL_TAILSCALE_AUTH_KEY), or tailscale.auth_key", nil)
 	}
 	if !looksLikeAuthKey(authKey) {
 		return m.fail("auth_key_invalid_format", ErrorClassNonRetryable, "tailscale auth key format is invalid", "provide a valid tskey-prefixed auth key", nil)

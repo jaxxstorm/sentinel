@@ -33,6 +33,11 @@ type runtimeDeps struct {
 	enrollment onboarding.EnrollmentManager
 }
 
+const (
+	envVarTSNetAuthKey          = "SENTINEL_TSNET_AUTH_KEY"
+	envVarTailscaleAuthKeyAlias = "SENTINEL_TAILSCALE_AUTH_KEY"
+)
+
 func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
@@ -59,9 +64,13 @@ func buildRuntime(opts *GlobalOptions) (*runtimeDeps, error) {
 	if opts.TailscaleFallbackOverride {
 		cfg.TSNet.AllowInteractiveFallback = true
 	}
+	authKeyEnv := strings.TrimSpace(os.Getenv(envVarTSNetAuthKey))
+	if authKeyEnv == "" {
+		authKeyEnv = strings.TrimSpace(os.Getenv(envVarTailscaleAuthKeyAlias))
+	}
 	authKey, sourceName := onboarding.ResolveAuthKey(
 		opts.TailscaleAuthKey,
-		os.Getenv("SENTINEL_TAILSCALE_AUTH_KEY"),
+		authKeyEnv,
 		cfg.TSNet.AuthKey,
 	)
 	cfg.TSNet.AuthKey = authKey
