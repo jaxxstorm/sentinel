@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate workflow syntax
-        uses: rhysd/actionlint@3c8e03070492263721fccf223f691ef34bb0e79c
+        uses: rhysd/actionlint@bb87fde98ed4852f8a9474b95355672feb1cae3b
 
       - name: Validate publish-image latest policy
         run: |
