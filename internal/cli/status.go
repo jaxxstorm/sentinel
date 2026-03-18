@@ -28,6 +28,7 @@ func newStatusCmd(opts *GlobalOptions) *cobra.Command {
 			printLine("log_format=%s", deps.cfg.Output.LogFormat)
 			printLine("detectors=%v", deps.cfg.DetectorOrder)
 			printLine("state_path=%s", deps.cfg.State.Path)
+			printLine("tailscale_runtime_mode=%s", deps.cfg.TSNet.RuntimeMode)
 			if deps.cfg.TSNet.AuthKeySource != "" && deps.cfg.TSNet.AuthKeySource != "none" {
 				printLine("tailscale_auth_key_source=%s", deps.cfg.TSNet.AuthKeySource)
 			}

@@ -27,12 +27,7 @@ func DefaultTSNetFetch(ctx context.Context, server *tsnet.Server) (Netmap, error
 	if err != nil {
 		return Netmap{}, fmt.Errorf("fetch tailscale status: %w", err)
 	}
-
-	statusData, err := json.Marshal(status)
-	if err != nil {
-		return Netmap{}, fmt.Errorf("marshal status: %w", err)
-	}
-	nm, err := decodeNetmapFromStatusJSON(statusData)
+	nm, err := decodeNetmapFromStatus(status)
 	if err != nil {
 		return Netmap{}, fmt.Errorf("decode status: %w", err)
 	}
@@ -47,6 +42,14 @@ func DefaultTSNetFetch(ctx context.Context, server *tsnet.Server) (Netmap, error
 
 	nm.PolledAt = time.Now().UTC()
 	return nm, nil
+}
+
+func decodeNetmapFromStatus(status any) (Netmap, error) {
+	statusData, err := json.Marshal(status)
+	if err != nil {
+		return Netmap{}, err
+	}
+	return decodeNetmapFromStatusJSON(statusData)
 }
 
 func fetchNetmapFromIPNBus(ctx context.Context, client *local.Client) (Netmap, error) {

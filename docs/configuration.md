@@ -80,6 +80,8 @@ Ordered list of enabled detector names.
 - `no_color`
 
 ### `tsnet`
+- `runtime_mode`: `embedded` (default) or `localapi`
+- `localapi_socket`: tailscaled LocalAPI socket path (used when `runtime_mode=localapi`)
 - `hostname`
 - `state_dir`
 - `advertise_tags`: list of tags in `tag:<name>` format
@@ -93,6 +95,7 @@ Ordered list of enabled detector names.
 - `login_timeout`
 
 `client_secret` requires `client_id`. If OAuth fields are set without `client_secret`, config validation fails.
+In `runtime_mode=localapi`, Sentinel reads from an existing tailscaled socket and does not require tsnet onboarding credentials.
 
 ## Environment Variable Matrix
 
@@ -116,6 +119,8 @@ see [Docker Compose and Railway](docker-compose.md).
 | `SENTINEL_OUTPUT_LOG_LEVEL` | `output.log_level` |
 | `SENTINEL_OUTPUT_NO_COLOR` | `output.no_color` |
 | `SENTINEL_TSNET_HOSTNAME` | `tsnet.hostname` |
+| `SENTINEL_TSNET_RUNTIME_MODE` | `tsnet.runtime_mode` |
+| `SENTINEL_TSNET_LOCALAPI_SOCKET` | `tsnet.localapi_socket` |
 | `SENTINEL_TSNET_STATE_DIR` | `tsnet.state_dir` |
 | `SENTINEL_TSNET_ADVERTISE_TAGS` | `tsnet.advertise_tags` (JSON array or comma-separated list) |
 | `SENTINEL_TSNET_LOGIN_MODE` | `tsnet.login_mode` |

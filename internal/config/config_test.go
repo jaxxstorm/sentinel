@@ -83,6 +83,34 @@ func TestValidateSourceMode(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsLocalAPIRuntimeMode(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.RuntimeMode = "localapi"
+	cfg.TSNet.LocalAPISocket = "/var/run/tailscale/tailscaled.sock"
+	cfg.TSNet.StateDir = ""
+	cfg.TSNet.ClientSecret = ""
+	cfg.TSNet.ClientID = ""
+	cfg.TSNet.LoginMode = "oauth"
+
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected localapi runtime mode to validate without tsnet onboarding credentials, got %v", err)
+	}
+}
+
+func TestValidateRejectsLocalAPIRuntimeWithoutSocket(t *testing.T) {
+	cfg := Default()
+	cfg.TSNet.RuntimeMode = "localapi"
+	cfg.TSNet.LocalAPISocket = " "
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("expected validation error for missing localapi socket")
+	}
+	if !strings.Contains(err.Error(), "tsnet.localapi_socket is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadExpandsNotifierSinkURLFromEnv(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sentinel.yaml")
