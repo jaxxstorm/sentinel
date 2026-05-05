@@ -8,7 +8,7 @@ require (
 	github.com/prometheus/client_golang v1.23.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.28.0
 	tailscale.com v1.94.1
 )
 
