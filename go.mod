@@ -3,7 +3,7 @@ module github.com/jaxxstorm/sentinel
 go 1.26.4
 
 require (
-	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/charmbracelet/lipgloss/v2 v2.0.6
 	github.com/jaxxstorm/vers v0.0.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
